@@ -52,8 +52,8 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <AuthProvider>
-          <Router>
+        <Router>
+          <AuthProvider>
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<LandingPage />} />
@@ -103,9 +103,9 @@ function App() {
               {/* Catch all */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-          </Router>
+          </AuthProvider>
           <Toaster position="top-right" richColors />
-        </AuthProvider>
+        </Router>
       </ThemeProvider>
     </QueryClientProvider>
   );
