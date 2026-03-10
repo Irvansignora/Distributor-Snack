@@ -1,0 +1,271 @@
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { NavLink } from 'react-router-dom';
+import { productService } from '@/services/products';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Search,
+  Plus,
+  MoreVertical,
+  Edit,
+  Trash2,
+  Package,
+  AlertTriangle,
+  Filter,
+  Download
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import type { Product } from '@/types';
+
+export default function Products() {
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [showLowStock, setShowLowStock] = useState(false);
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['products', search, page, showLowStock],
+    queryFn: () => productService.getProducts({
+      search: search || undefined,
+      page,
+      limit: 12,
+      low_stock: showLowStock,
+    }),
+  });
+
+  const handleDelete = async (id: string) => {
+    if (confirm('Are you sure you want to delete this product?')) {
+      try {
+        await productService.deleteProduct(id);
+        refetch();
+      } catch (error) {
+        alert('Failed to delete product');
+      }
+    }
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    }).format(value);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Products</h1>
+          <p className="text-muted-foreground">
+            Manage your product catalog and inventory
+          </p>
+        </div>
+        <Button asChild>
+          <NavLink to="/admin/products/new">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Product
+          </NavLink>
+        </Button>
+      </div>
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search products..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant={showLowStock ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setShowLowStock(!showLowStock)}
+              >
+                <AlertTriangle className="mr-2 h-4 w-4" />
+                Low Stock
+              </Button>
+              <Button variant="outline" size="sm">
+                <Filter className="mr-2 h-4 w-4" />
+                Filter
+              </Button>
+              <Button variant="outline" size="sm">
+                <Download className="mr-2 h-4 w-4" />
+                Export
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Products Grid */}
+      {isLoading ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              <div className="h-48 bg-muted" />
+              <CardContent className="p-4 space-y-3">
+                <div className="h-4 bg-muted rounded w-3/4" />
+                <div className="h-4 bg-muted rounded w-1/2" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : data?.products.length === 0 ? (
+        <Card className="p-12 text-center">
+          <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <h3 className="text-lg font-medium mb-2">No products found</h3>
+          <p className="text-muted-foreground mb-4">
+            {search ? 'Try adjusting your search' : 'Start by adding your first product'}
+          </p>
+          {!search && (
+            <Button asChild>
+              <NavLink to="/admin/products/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Product
+              </NavLink>
+            </Button>
+          )}
+        </Card>
+      ) : (
+        <>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {data?.products.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                onDelete={handleDelete}
+                formatCurrency={formatCurrency}
+              />
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {data?.pagination && data.pagination.totalPages > 1 && (
+            <div className="flex justify-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                Previous
+              </Button>
+              <span className="flex items-center px-4 text-sm text-muted-foreground">
+                Page {page} of {data.pagination.totalPages}
+              </span>
+              <Button
+                variant="outline"
+                onClick={() => setPage(p => Math.min(data.pagination.totalPages, p + 1))}
+                disabled={page === data.pagination.totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ProductCard({ 
+  product, 
+  onDelete,
+  formatCurrency 
+}: { 
+  product: Product; 
+  onDelete: (id: string) => void;
+  formatCurrency: (value: number) => string;
+}) {
+  const isLowStock = product.stock_quantity <= product.reorder_level;
+  const isOutOfStock = product.stock_quantity === 0;
+
+  return (
+    <Card className="overflow-hidden group">
+      <div className="relative aspect-square bg-muted">
+        {product.image_url ? (
+          <img
+            src={product.image_url}
+            alt={product.name}
+            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Package className="h-16 w-16 text-muted-foreground/50" />
+          </div>
+        )}
+        {(isLowStock || isOutOfStock) && (
+          <div className="absolute top-2 left-2">
+            <Badge variant={isOutOfStock ? 'destructive' : 'secondary'}>
+              {isOutOfStock ? 'Out of Stock' : 'Low Stock'}
+            </Badge>
+          </div>
+        )}
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="secondary" size="icon" className="h-8 w-8">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild>
+                <NavLink to={`/admin/products/edit/${product.id}`}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit
+                </NavLink>
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                className="text-destructive"
+                onClick={() => onDelete(product.id)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="font-medium truncate">{product.name}</h3>
+            <p className="text-sm text-muted-foreground">{product.sku}</p>
+          </div>
+        </div>
+        <div className="mt-3 flex items-center justify-between">
+          <div>
+            <p className="text-lg font-bold">{formatCurrency(product.price)}</p>
+            <p className="text-xs text-muted-foreground">
+              Wholesale: {formatCurrency(product.wholesale_price)}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className={cn(
+              "text-sm font-medium",
+              isOutOfStock ? "text-destructive" :
+              isLowStock ? "text-amber-500" : "text-emerald-500"
+            )}>
+              {product.stock_quantity} {product.unit}
+            </p>
+            <p className="text-xs text-muted-foreground">in stock</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
