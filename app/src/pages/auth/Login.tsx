@@ -8,9 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Package, Eye, EyeOff, Loader2, AlertCircle, Info } from 'lucide-react';
-import axios from 'axios';
-
-const API = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+import api from '@/services/api';
 
 export default function Login() {
   const { login } = useAuth();
@@ -57,7 +55,7 @@ export default function Login() {
     }
     setResetLoading(true);
     try {
-      await axios.post(`${API}/auth/reset-password`, { email: resetEmail, new_password: newPassword });
+      await api.post('/auth/reset-password', { email: resetEmail, new_password: newPassword });
       setResetMsg('Password berhasil diubah! Silakan login.');
       setEmail(resetEmail);
       setPassword('');
