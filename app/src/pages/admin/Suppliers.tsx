@@ -32,9 +32,10 @@ export default function Suppliers() {
   );
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('id-ID', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
     }).format(value);
   };
 
@@ -44,7 +45,7 @@ export default function Suppliers() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Suppliers</h1>
           <p className="text-muted-foreground">
-            Manage your supplier relationships
+            Kelola data toko & reseller
           </p>
         </div>
         <Button>
@@ -58,7 +59,7 @@ export default function Suppliers() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search suppliers..."
+              placeholder="Cari toko..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10"
