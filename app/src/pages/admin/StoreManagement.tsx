@@ -36,7 +36,7 @@ const TIER_CONFIG = {
 export default function StoreManagement() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [approveDialog, setApproveDialog] = useState<any>(null);
   const [rejectDialog, setRejectDialog] = useState<any>(null);
   const [approveData, setApproveData] = useState({ tier: 'bronze', credit_limit: '0', notes: '' });
@@ -44,7 +44,7 @@ export default function StoreManagement() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-stores', search, statusFilter],
-    queryFn: () => axios.get(`${API}/admin/stores`, { headers: headers(), params: { search: search || undefined, status: statusFilter || undefined, limit: 50 } }).then(r => r.data),
+    queryFn: () => axios.get(`${API}/admin/stores`, { headers: headers(), params: { search: search || undefined, status: statusFilter !== 'all' ? statusFilter : undefined, limit: 50 } }).then(r => r.data),
   });
 
   const approveMutation = useMutation({
@@ -84,7 +84,7 @@ export default function StoreManagement() {
                 <SelectValue placeholder="Semua Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Semua Status</SelectItem>
+                <SelectItem value="all">Semua Status</SelectItem>
                 {Object.entries(STATUS_CONFIG).map(([v, c]) => <SelectItem key={v} value={v}>{c.label}</SelectItem>)}
               </SelectContent>
             </Select>
