@@ -77,8 +77,8 @@ export default function Register() {
               <Package className="h-7 w-7 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold">SnackTrack</h1>
-              <p className="text-xs text-muted-foreground">Distribution Management</p>
+              <h1 className="text-2xl font-bold">SnackHub</h1>
+              <p className="text-xs text-muted-foreground">Distributor Snack Terpercaya</p>
             </div>
           </NavLink>
         </div>
@@ -87,7 +87,7 @@ export default function Register() {
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold text-center">Create an account</CardTitle>
             <CardDescription className="text-center">
-              Register as a supplier to start ordering
+              Daftar dan mulai belanja snack dengan harga distributor
             </CardDescription>
           </CardHeader>
 
