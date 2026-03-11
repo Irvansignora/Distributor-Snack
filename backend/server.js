@@ -41,7 +41,10 @@ const supabase = createClient(
     },
   }
 );
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || 'snackhub-secret-key-change-in-production';
+if (!process.env.JWT_SECRET) {
+  console.warn('⚠️  JWT_SECRET env variable tidak di-set! Menggunakan fallback. Set di Vercel environment variables.');
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -158,10 +161,7 @@ app.post('/api/auth/register',
         .insert({ email, password: hashedPassword, name, phone, role: 'customer' })
         .select()
         .single();
-      if (error) {
-        console.error('Register insert error:', JSON.stringify(error));
-        throw new Error(error.message || 'Gagal membuat akun');
-      }
+      if (error) throw error;
 
       // Auto-create empty store profile
       await supabase.from('customer_stores').insert({
@@ -195,6 +195,7 @@ app.post('/api/auth/login', async (req, res) => {
     const { data: user, error: userError } = await supabase
       .from('users').select('*').eq('email', email).single();
 
+    // Log error detail untuk debugging di Vercel logs
     if (userError) {
       console.error('Login DB error:', JSON.stringify(userError));
       return res.status(500).json({ error: 'DB error: ' + userError.message });
@@ -203,7 +204,7 @@ app.post('/api/auth/login', async (req, res) => {
     if (!user || !(await bcrypt.compare(password, user.password)))
       return res.status(401).json({ error: 'Email atau password salah' });
 
-    // is_active null/undefined = aktif (baru register)
+    // is_active null/undefined dianggap aktif (row baru)
     if (user.is_active === false) return res.status(403).json({ error: 'Akun dinonaktifkan' });
 
     await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
@@ -1451,7 +1452,20 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// Startup env check
+const requiredEnvs = ['SUPABASE_URL'];
+const missingEnvs = requiredEnvs.filter(e => !process.env[e]);
+if (missingEnvs.length > 0) {
+  console.error('❌ Missing required env variables:', missingEnvs.join(', '));
+}
+
+const usedKey = process.env.SUPABASE_SERVICE_KEY ? 'SUPABASE_SERVICE_KEY' 
+  : process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SUPABASE_SERVICE_ROLE_KEY'
+  : 'SUPABASE_ANON_KEY (⚠️ BUKAN service role!)';
+
+console.log('🔑 Supabase key used:', usedKey);
+console.log('🔐 JWT_SECRET set:', !!process.env.JWT_SECRET);
+
 app.listen(PORT, () => {
   console.log(`✅ SnackHub B2B API running on port ${PORT}`);
 });
-
