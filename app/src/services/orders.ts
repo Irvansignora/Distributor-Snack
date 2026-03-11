@@ -16,9 +16,14 @@ interface OrderResponse {
 }
 
 interface CreateOrderData {
-  items: { product_id: string; quantity: number }[];
+  items: { product_id: string; qty_karton?: number; quantity?: number }[];
   notes?: string;
-  shipping_address?: string;
+  shipping_address?: Record<string, any> | string;
+  payment_method?: string;
+  courier?: string;
+  courier_service?: string;
+  promo_code?: string;
+  use_credit?: boolean;
 }
 
 export const orderService = {
