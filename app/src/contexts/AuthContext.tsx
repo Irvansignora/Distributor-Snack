@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Redirect based on role
       if (response.user.role === 'admin' || response.user.role === 'staff') {
         navigate('/admin/dashboard');
-      } else if (response.user.role === 'supplier') {
+      } else if (response.user.role === 'supplier' || response.user.role === 'customer') {
         navigate('/supplier/dashboard');
       }
     } finally {
@@ -64,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('token', response.token);
       setUser(response.user);
       
-      if (response.user.role === 'supplier') {
+      if (response.user.role === 'supplier' || response.user.role === 'customer') {
         navigate('/supplier/dashboard');
       }
     } finally {
