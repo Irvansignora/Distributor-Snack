@@ -38,9 +38,10 @@ export default function MyOrders() {
   });
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('id-ID', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
     }).format(value);
   };
 
@@ -67,7 +68,7 @@ export default function MyOrders() {
         <CardContent className="p-4">
           <Select value={status} onValueChange={(v) => setStatus(v as OrderStatus | 'all')}>
             <SelectTrigger className="w-full sm:w-[200px]">
-              <SelectValue placeholder="Filter by status" />
+              <SelectValue placeholder="Filter status" />
             </SelectTrigger>
             <SelectContent>
               {statusOptions.map((option) => (
