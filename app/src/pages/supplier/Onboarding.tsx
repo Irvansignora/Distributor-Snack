@@ -9,10 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle, Upload, Store, FileText, Camera, Loader2, ChevronRight, ChevronLeft, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import axios from 'axios';
-
-const API = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-
+import api from '@/services/api';
 const STEPS = [
   { id: 1, title: 'Info Toko', icon: Store },
   { id: 2, title: 'Dokumen', icon: FileText },
@@ -57,13 +54,10 @@ export default function Onboarding() {
   const [docs, setDocs] = useState({ ktp_number: store?.ktp_number || '', npwp_number: store?.npwp_number || '', nib_number: store?.nib_number || '' });
   const [files, setFiles] = useState<Record<string, File | null>>({ ktp_photo: null, store_photo: null, selfie_ktp: null, npwp_photo: null });
 
-  const token = localStorage.getItem('token');
-  const headers = { Authorization: `Bearer ${token}` };
-
   const handleSaveStoreInfo = async () => {
     setError(''); setLoading(true);
     try {
-      await axios.put(`${API}/store/profile`, storeInfo, { headers });
+      await api.put('/store/profile', storeInfo);
       setStep(2);
     } catch (e: any) {
       setError(e.response?.data?.error || 'Gagal menyimpan info toko');
@@ -81,7 +75,7 @@ export default function Onboarding() {
       if (files.store_photo) formData.append('store_photo', files.store_photo);
       if (files.selfie_ktp) formData.append('selfie_ktp', files.selfie_ktp);
       if (files.npwp_photo) formData.append('npwp_photo', files.npwp_photo);
-      await axios.post(`${API}/store/documents`, formData, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } });
+      await api.post('/store/documents', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       setStep(3);
     } catch (e: any) {
       setError(e.response?.data?.error || 'Gagal upload dokumen');
@@ -91,7 +85,7 @@ export default function Onboarding() {
   const handleSubmitReview = async () => {
     setError(''); setLoading(true);
     try {
-      await axios.post(`${API}/store/submit-review`, {}, { headers });
+      await api.post('/store/submit-review', {});
       setSuccess('Dokumen berhasil dikirim! Tim kami akan mereview dalam 1x24 jam kerja.');
       if (refreshStore) await refreshStore();
     } catch (e: any) {
