@@ -13,9 +13,10 @@ import type { OrderStatus } from '@/types';
 const getStatusIcon = (status: OrderStatus) => {
   switch (status) {
     case 'pending': return Clock;
-    case 'approved': return CheckCircle;
-    case 'packed': return Package;
+    case 'confirmed': return CheckCircle;
+    case 'packing': return Package;
     case 'shipped': return Truck;
+    case 'delivered': return CheckCircle;
     case 'completed': return CheckCircle;
     case 'cancelled': return XCircle;
     default: return Clock;
@@ -26,9 +27,10 @@ const getStatusColor = (status: OrderStatus) => {
   switch (status) {
     case 'completed': return 'text-emerald-500';
     case 'pending': return 'text-amber-500';
-    case 'approved': return 'text-blue-500';
-    case 'packed': return 'text-purple-500';
+    case 'confirmed': return 'text-blue-500';
+    case 'packing': return 'text-purple-500';
     case 'shipped': return 'text-cyan-500';
+    case 'delivered': return 'text-teal-500';
     case 'cancelled': return 'text-red-500';
     default: return 'text-gray-500';
   }
@@ -94,11 +96,12 @@ export default function SupplierOrderDetail() {
                 <div>
                   <p className="font-semibold text-lg capitalize">{order.status}</p>
                   <p className="text-sm text-muted-foreground">
-                    {order.status === 'pending' && 'Your order is awaiting approval'}
-                    {order.status === 'approved' && 'Your order has been approved'}
-                    {order.status === 'packed' && 'Your order is being packed'}
+                    {order.status === 'pending' && 'Your order is awaiting confirmation'}
+                    {order.status === 'confirmed' && 'Your order has been confirmed'}
+                    {order.status === 'packing' && 'Your order is being packed'}
                     {order.status === 'shipped' && 'Your order is on the way'}
-                    {order.status === 'completed' && 'Your order has been delivered'}
+                    {order.status === 'delivered' && 'Your order has been delivered'}
+                    {order.status === 'completed' && 'Your order is complete'}
                     {order.status === 'cancelled' && 'Your order has been cancelled'}
                   </p>
                 </div>
