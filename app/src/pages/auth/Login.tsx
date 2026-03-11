@@ -42,8 +42,8 @@ export default function Login() {
               <Package className="h-7 w-7 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold">SnackTrack</h1>
-              <p className="text-xs text-muted-foreground">Distribution Management</p>
+              <h1 className="text-2xl font-bold">SnackHub</h1>
+              <p className="text-xs text-muted-foreground">Distributor Snack Terpercaya</p>
             </div>
           </NavLink>
         </div>
@@ -154,7 +154,7 @@ export default function Login() {
           <p className="text-xs text-center text-muted-foreground mb-2">Demo Credentials</p>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="bg-background p-2 rounded border">
-              <span className="font-medium">Admin:</span> admin@snacktrack.com
+              <span className="font-medium">Admin:</span> admin@snackhub.id
             </div>
             <div className="bg-background p-2 rounded border">
               <span className="font-medium">Password:</span> admin123
