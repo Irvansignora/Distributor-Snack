@@ -41,10 +41,7 @@ const supabase = createClient(
     },
   }
 );
-const JWT_SECRET = process.env.JWT_SECRET || 'snackhub-secret-key-change-in-production';
-if (!process.env.JWT_SECRET) {
-  console.warn('⚠️  JWT_SECRET env variable tidak di-set! Menggunakan fallback. Set di Vercel environment variables.');
-}
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -192,26 +189,32 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const { data: user, error: userError } = await supabase
+    if (!email || !password)
+      return res.status(400).json({ error: 'Email dan password wajib diisi' });
+
+    const { data: user, error: dbError } = await supabase
       .from('users').select('*').eq('email', email).single();
 
-    // Log error detail untuk debugging di Vercel logs
-    if (userError) {
-      console.error('Login DB error:', JSON.stringify(userError));
-      return res.status(500).json({ error: 'DB error: ' + userError.message });
+    if (dbError) {
+      console.error('Login DB error:', JSON.stringify(dbError));
+      return res.status(500).json({ error: 'Gagal mengakses database: ' + dbError.message });
     }
 
-    if (!user || !(await bcrypt.compare(password, user.password)))
-      return res.status(401).json({ error: 'Email atau password salah' });
+    if (!user)
+      return res.status(401).json({ error: 'Email tidak terdaftar' });
 
-    // is_active null/undefined dianggap aktif (row baru)
-    if (user.is_active === false) return res.status(403).json({ error: 'Akun dinonaktifkan' });
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch)
+      return res.status(401).json({ error: 'Password salah' });
+
+    if (user.is_active === false)
+      return res.status(403).json({ error: 'Akun dinonaktifkan, hubungi admin' });
 
     await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
 
     const token = jwt.sign(
       { id: user.id, userId: user.id, email: user.email, role: user.role },
-      JWT_SECRET, { expiresIn: '7d' }
+      JWT_SECRET || 'snackhub-fallback-secret', { expiresIn: '7d' }
     );
 
     let store = null;
@@ -228,6 +231,27 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (e) {
     console.error('Login error:', e);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Reset password (tanpa token — cukup email + password baru)
+// Untuk keperluan admin/debug. Di production sebaiknya tambah OTP/email verification
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { email, new_password } = req.body;
+    if (!email || !new_password) return res.status(400).json({ error: 'Email dan password baru wajib diisi' });
+    if (new_password.length < 6) return res.status(400).json({ error: 'Password minimal 6 karakter' });
+
+    const { data: user } = await supabase.from('users').select('id').eq('email', email).single();
+    if (!user) return res.status(404).json({ error: 'Email tidak terdaftar' });
+
+    const hashed = await bcrypt.hash(new_password, 12);
+    await supabase.from('users').update({ password: hashed, is_active: true }).eq('id', user.id);
+
+    res.json({ message: 'Password berhasil diubah' });
+  } catch (e) {
+    console.error('Reset password error:', e);
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -1451,20 +1475,6 @@ app.use((err, req, res, next) => {
   console.error('Unhandled error:', err.stack);
   res.status(500).json({ error: 'Internal server error' });
 });
-
-// Startup env check
-const requiredEnvs = ['SUPABASE_URL'];
-const missingEnvs = requiredEnvs.filter(e => !process.env[e]);
-if (missingEnvs.length > 0) {
-  console.error('❌ Missing required env variables:', missingEnvs.join(', '));
-}
-
-const usedKey = process.env.SUPABASE_SERVICE_KEY ? 'SUPABASE_SERVICE_KEY' 
-  : process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SUPABASE_SERVICE_ROLE_KEY'
-  : 'SUPABASE_ANON_KEY (⚠️ BUKAN service role!)';
-
-console.log('🔑 Supabase key used:', usedKey);
-console.log('🔐 JWT_SECRET set:', !!process.env.JWT_SECRET);
 
 app.listen(PORT, () => {
   console.log(`✅ SnackHub B2B API running on port ${PORT}`);
