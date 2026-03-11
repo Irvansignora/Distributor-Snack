@@ -56,11 +56,11 @@ export default function Catalog() {
   const handleAddToCart = (product: Product) => {
     const quantity = quantities[product.id] || 1;
     if (quantity > product.stock_quantity) {
-      toast.error(`Only ${product.stock_quantity} items available`);
+      toast.error(`Stok tersedia hanya ${product.stock_quantity} item`);
       return;
     }
     addToCart(product, quantity);
-    toast.success(`${product.name} added to cart`);
+    toast.success(`${product.name} ditambahkan ke keranjang`);
     setQuantities(prev => ({ ...prev, [product.id]: 1 }));
   };
 
@@ -76,9 +76,9 @@ export default function Catalog() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Product Catalog</h1>
+          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Katalog Produk</h1>
           <p className="text-muted-foreground">
-            Browse and order products from our catalog
+            Temukan snack favoritmu dengan harga terbaik
           </p>
         </div>
         <Button asChild>
@@ -96,7 +96,7 @@ export default function Catalog() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search products..."
+                placeholder="Cari produk..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10"
@@ -108,7 +108,7 @@ export default function Catalog() {
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
+                <SelectItem value="all">Semua Kategori</SelectItem>
                 {categoriesData?.categories.map((cat) => (
                   <SelectItem key={cat.id} value={cat.id}>
                     {cat.name}
@@ -136,8 +136,8 @@ export default function Catalog() {
       ) : productsData?.products.length === 0 ? (
         <Card className="p-12 text-center">
           <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium mb-2">No products found</h3>
-          <p className="text-muted-foreground">Try adjusting your search or filters</p>
+          <h3 className="text-lg font-medium mb-2">Produk tidak ditemukan</h3>
+          <p className="text-muted-foreground">Coba ubah kata kunci atau filter kategori</p>
         </Card>
       ) : (
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
@@ -203,25 +203,20 @@ function ProductCard({
             {product.name}
           </h3>
         </NavLink>
-        <p className="text-xs text-muted-foreground mt-1">{product.sku}</p>
         
         <div className="mt-auto pt-3">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <p className="text-lg font-bold">{formatCurrency(product.wholesale_price || product.price)}</p>
+              <p className="text-lg font-bold text-primary">{formatCurrency(product.wholesale_price || product.price)}</p>
               {product.wholesale_price && product.wholesale_price < product.price && (
                 <p className="text-xs text-muted-foreground line-through">
                   {formatCurrency(product.price)}
                 </p>
               )}
             </div>
-            <p className={cn(
-              "text-xs",
-              isOutOfStock ? "text-destructive" :
-              isLowStock ? "text-amber-500" : "text-emerald-500"
-            )}>
-              {product.stock_quantity} in stock
-            </p>
+            {isOutOfStock && (
+              <span className="text-xs text-destructive font-medium">Habis</span>
+            )}
           </div>
 
           {!isOutOfStock && (
@@ -249,7 +244,7 @@ function ProductCard({
               </div>
               <Button size="sm" className="flex-1" onClick={onAddToCart}>
                 <ShoppingCart className="h-4 w-4 mr-1" />
-                Add
+                Tambah
               </Button>
             </div>
           )}
