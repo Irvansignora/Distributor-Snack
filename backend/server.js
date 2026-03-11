@@ -4,1187 +4,1155 @@ import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
-import { body, validationResult } from 'express-validator';
 import multer from 'multer';
-import path from 'path';
-import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, subDays, subMonths } from 'date-fns';
+import { body, validationResult } from 'express-validator';
+import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, subDays } from 'date-fns';
+import { v2 as cloudinary } from 'cloudinary';
 
 dotenv.config();
 
+// Cloudinary config (untuk foto produk)
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dyhvx9wit',
+  api_key:    process.env.CLOUDINARY_API_KEY    || '481755884898814',
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'isTbcJBFnyCVr-3mdqSCWMUtDRQ',
+});
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Supabase client
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error('FATAL: SUPABASE_URL and SUPABASE_ANON_KEY must be set in environment variables');
-  process.exit(1);
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-// JWT Secret
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 const JWT_SECRET = process.env.JWT_SECRET;
 
-if (!JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET must be set in environment variables');
-  process.exit(1);
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, ['image/jpeg','image/png','image/webp','application/pdf'].includes(file.mimetype)),
+});
+
+// ════════════════════════════════════════════════════════════════
+// MIDDLEWARE
+// ════════════════════════════════════════════════════════════════
+
+const authenticateToken = async (req, res, next) => {
+  const token = req.headers['authorization']?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Access token required' });
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch {
+    res.status(403).json({ error: 'Invalid or expired token' });
+  }
+};
+
+// Alias
+const auth = authenticateToken;
+
+const requireRole = (roles) => (req, res, next) => {
+  if (!roles.includes(req.user?.role)) return res.status(403).json({ error: 'Insufficient permissions' });
+  next();
+};
+
+// Alias
+const role = (...roles) => requireRole(roles);
+
+const validate = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  next();
+};
+
+// ════════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════════
+
+// Upload dokumen & bukti bayar → Supabase Storage
+async function uploadFile(buffer, mimetype, bucket, filename) {
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .upload(filename, buffer, { contentType: mimetype, upsert: true });
+  if (error) throw error;
+  const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(data.path);
+  return publicUrl;
 }
 
-// Multer configuration for file uploads
-const storage = multer.memoryStorage();
-const upload = multer({ 
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type'), false);
-    }
-  }
-});
-
-// Authentication Middleware
-const authenticateToken = async (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(403).json({ error: 'Invalid or expired token' });
-  }
-};
-
-// Role-based access control
-const requireRole = (roles) => {
-  return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Insufficient permissions' });
-    }
-    next();
-  };
-};
-
-// ==================== AUTH ROUTES ====================
-
-// Register
-app.post('/api/auth/register',
-  [
-    body('email').isEmail().normalizeEmail(),
-    body('password').isLength({ min: 6 }),
-    body('name').trim().isLength({ min: 2 }),
-    body('role').isIn(['admin', 'supplier', 'staff']),
-    body('company_name').optional().trim()
-  ],
-  async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { email, password, name, role, company_name, phone, address } = req.body;
-
-    try {
-      // Check if user exists
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', email)
-        .single();
-
-      if (existingUser) {
-        return res.status(400).json({ error: 'User already exists' });
+// Upload foto produk → Cloudinary
+async function uploadProductImage(buffer, mimetype, publicId) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'snackhub/products',
+        public_id: publicId,
+        overwrite: true,
+        resource_type: 'image',
+        transformation: [
+          { width: 800, height: 800, crop: 'limit', quality: 'auto', fetch_format: 'auto' },
+        ],
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result.secure_url);
       }
+    );
+    stream.end(buffer);
+  });
+}
 
-      // Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
+async function sendWhatsApp(phone, message, storeId = null) {
+  try {
+    const { data: setting } = await supabase.from('settings').select('value').eq('key', 'wa_provider').single();
+    if (!setting?.value?.enabled) return;
+    const res = await fetch('https://api.fonnte.com/send', {
+      method: 'POST',
+      headers: { 'Authorization': process.env.FONNTE_TOKEN },
+      body: JSON.stringify({ target: phone, message }),
+    });
+    await supabase.from('wa_message_log').insert({
+      store_id: storeId, phone_number: phone,
+      message_body: message, provider: 'fonnte',
+      status: res.ok ? 'sent' : 'failed',
+    });
+  } catch (e) { console.error('WA error:', e.message); }
+}
 
-      // Create user
+async function createNotification(userId, type, title, message, data = {}) {
+  await supabase.from('notifications').insert({ user_id: userId, type, title, message, data });
+}
+
+// ════════════════════════════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════════════════════════════
+
+app.post('/api/auth/register',
+  [body('email').isEmail().normalizeEmail(), body('password').isLength({ min: 6 }), body('name').trim().notEmpty()],
+  validate,
+  async (req, res) => {
+    try {
+      const { email, password, name, phone, company_name } = req.body;
+
+      const { data: existing } = await supabase.from('users').select('id').eq('email', email).single();
+      if (existing) return res.status(409).json({ error: 'Email sudah terdaftar' });
+
+      const hashedPassword = await bcrypt.hash(password, 12);
       const { data: user, error } = await supabase
         .from('users')
-        .insert([{
-          id: uuidv4(),
-          email,
-          password: hashedPassword,
-          name,
-          role,
-          company_name,
-          phone,
-          address,
-          status: 'active',
-          created_at: new Date().toISOString()
-        }])
+        .insert({ email, password: hashedPassword, name, phone, role: 'customer' })
         .select()
         .single();
-
       if (error) throw error;
 
-      // Generate JWT
-      const token = jwt.sign(
-        { userId: user.id, email: user.email, role: user.role },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
-
-      res.status(201).json({
-        message: 'User registered successfully',
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          company_name: user.company_name
-        }
+      // Auto-create empty store profile
+      await supabase.from('customer_stores').insert({
+        user_id: user.id,
+        store_name: company_name || name,
+        owner_name: name,
+        status: 'draft',
+        tier: 'bronze',
       });
-    } catch (error) {
-      console.error('Registration error:', error);
-      res.status(500).json({ error: 'Registration failed' });
+
+      // Notify admins
+      const { data: admins } = await supabase.from('users').select('id').eq('role', 'admin');
+      for (const admin of admins || []) {
+        await createNotification(admin.id, 'new_store_registration',
+          'Pendaftaran Toko Baru', `${name} baru saja mendaftar`, { user_id: user.id });
+      }
+
+      const token = jwt.sign({ id: user.id, userId: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+      res.status(201).json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
+    } catch (e) {
+      console.error('Register error:', e);
+      res.status(500).json({ error: e.message || 'Registration failed' });
     }
   }
 );
 
-// Login
-app.post('/api/auth/login',
-  [
-    body('email').isEmail().normalizeEmail(),
-    body('password').exists()
-  ],
-  async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
+app.post('/api/auth/login', async (req, res) => {
+  try {
     const { email, password } = req.body;
 
+    const { data: user } = await supabase
+      .from('users').select('*').eq('email', email).single();
+
+    if (!user || !(await bcrypt.compare(password, user.password)))
+      return res.status(401).json({ error: 'Email atau password salah' });
+
+    if (!user.is_active) return res.status(403).json({ error: 'Akun dinonaktifkan' });
+
+    await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
+
+    const token = jwt.sign(
+      { id: user.id, userId: user.id, email: user.email, role: user.role },
+      JWT_SECRET, { expiresIn: '7d' }
+    );
+
+    let store = null;
+    if (user.role === 'customer') {
+      const { data } = await supabase.from('customer_stores').select('*').eq('user_id', user.id).single();
+      store = data;
+    }
+
+    res.json({
+      token,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, company_name: user.name },
+      store,
+    });
+  } catch (e) {
+    console.error('Login error:', e);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+app.get('/api/auth/me', auth, async (req, res) => {
+  try {
+    const { data: user } = await supabase
+      .from('users').select('id, email, name, role, phone').eq('id', req.user.id).single();
+
+    let store = null;
+    if (user?.role === 'customer') {
+      const { data } = await supabase.from('customer_stores').select('*').eq('user_id', user.id).single();
+      store = data;
+    }
+
+    res.json({ user, store });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════
+// STORE ONBOARDING (Customer)
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/store/profile', auth, role('customer'), async (req, res) => {
+  const { data, error } = await supabase.from('v_stores_full').select('*').eq('user_id', req.user.id).single();
+  if (error) return res.status(404).json({ error: 'Store not found' });
+  res.json({ store: data });
+});
+
+app.put('/api/store/profile', auth, role('customer'), async (req, res) => {
+  try {
+    const allowed = ['store_name','store_type','owner_name','phone_store','whatsapp',
+      'address_line','city_id','province_id','postal_code','monthly_gmv_estimate'];
+    const updates = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
+    const { data, error } = await supabase.from('customer_stores').update(updates).eq('user_id', req.user.id).select().single();
+    if (error) throw error;
+    res.json({ store: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/store/documents', auth, role('customer'),
+  upload.fields([
+    { name: 'ktp_photo', maxCount: 1 },
+    { name: 'npwp_photo', maxCount: 1 },
+    { name: 'store_photo', maxCount: 1 },
+    { name: 'selfie_ktp', maxCount: 1 },
+  ]),
+  async (req, res) => {
     try {
-      // Get user
-      const { data: user, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email)
-        .single();
+      const { ktp_number, npwp_number, nib_number } = req.body;
+      const updates = {};
+      if (ktp_number) updates.ktp_number = ktp_number;
+      if (npwp_number) updates.npwp_number = npwp_number;
+      if (nib_number) updates.nib_number = nib_number;
 
-      if (error || !user) {
-        return res.status(401).json({ error: 'Invalid credentials' });
+      const { data: store } = await supabase.from('customer_stores').select('id').eq('user_id', req.user.id).single();
+
+      for (const [field, files] of Object.entries(req.files || {})) {
+        const file = files[0];
+        const ext = file.originalname.split('.').pop();
+        updates[`${field}_url`] = await uploadFile(
+          file.buffer, file.mimetype, 'documents',
+          `stores/${store.id}/${field}_${Date.now()}.${ext}`
+        );
       }
 
-      // Check password
-      const isValidPassword = await bcrypt.compare(password, user.password);
-      if (!isValidPassword) {
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
-
-      // Check status
-      if (user.status !== 'active') {
-        return res.status(403).json({ error: 'Account is not active' });
-      }
-
-      // Update last login
-      await supabase
-        .from('users')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', user.id);
-
-      // Generate JWT
-      const token = jwt.sign(
-        { userId: user.id, email: user.email, role: user.role },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
-
-      res.json({
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          company_name: user.company_name,
-          phone: user.phone,
-          address: user.address,
-          credit_limit: user.credit_limit,
-          current_credit: user.current_credit
-        }
-      });
-    } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({ error: 'Login failed' });
+      await supabase.from('customer_stores').update(updates).eq('user_id', req.user.id);
+      res.json({ message: 'Dokumen berhasil diupload' });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
     }
   }
 );
 
-// Get current user
-app.get('/api/auth/me', authenticateToken, async (req, res) => {
+app.post('/api/store/submit-review', auth, role('customer'), async (req, res) => {
   try {
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('id, email, name, role, company_name, phone, address, credit_limit, current_credit, status, created_at')
-      .eq('id', req.user.userId)
-      .single();
+    const { data: store } = await supabase.from('customer_stores').select('*').eq('user_id', req.user.id).single();
+    if (!store) return res.status(404).json({ error: 'Store not found' });
+    if (!['draft','rejected'].includes(store.status))
+      return res.status(400).json({ error: 'Tidak bisa submit dengan status: ' + store.status });
+    if (!store.ktp_photo_url || !store.store_photo_url)
+      return res.status(400).json({ error: 'Foto KTP dan foto toko wajib diupload' });
 
-    if (error || !user) {
-      return res.status(404).json({ error: 'User not found' });
+    await supabase.from('customer_stores')
+      .update({ status: 'pending_review', rejection_reason: null })
+      .eq('id', store.id);
+
+    const { data: admins } = await supabase.from('users').select('id').eq('role', 'admin');
+    for (const a of admins || []) {
+      await createNotification(a.id, 'new_store_registration',
+        '🔔 Toko Menunggu Review', `${store.store_name} mengirim dokumen verifikasi`, { store_id: store.id });
     }
 
-    res.json({ user });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to get user' });
+    res.json({ message: 'Dokumen dikirim, menunggu review tim SnackHub' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-// ==================== PRODUCT ROUTES ====================
+// ════════════════════════════════════════════════════════════════
+// ADMIN: STORE MANAGEMENT
+// ════════════════════════════════════════════════════════════════
 
-// Get all products (with filters)
-app.get('/api/products', authenticateToken, async (req, res) => {
-  const { category, search, low_stock, page = 1, limit = 20 } = req.query;
-
+app.get('/api/admin/stores', auth, requireRole(['admin','staff']), async (req, res) => {
   try {
-    let query = supabase
-      .from('products')
-      .select('*, categories(name)', { count: 'exact' })
-      .eq('is_active', true)
+    const { status, tier, search, page = 1, limit = 20 } = req.query;
+    let q = supabase.from('v_stores_full').select('*', { count: 'exact' });
+    if (status) q = q.eq('status', status);
+    if (tier) q = q.eq('tier', tier);
+    if (search) q = q.or(`store_name.ilike.%${search}%,owner_name.ilike.%${search}%,email.ilike.%${search}%`);
+    const offset = (page - 1) * limit;
+    const { data, count, error } = await q.range(offset, offset + limit - 1).order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json({ stores: data, total: count, page: Number(page), limit: Number(limit) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/stores/:id', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { data: store } = await supabase.from('v_stores_full').select('*').eq('id', req.params.id).single();
+    if (!store) return res.status(404).json({ error: 'Store not found' });
+    const { data: orders } = await supabase.from('orders')
+      .select('id,order_number,status,payment_status,total,created_at')
+      .eq('store_id', req.params.id).order('created_at', { ascending: false }).limit(10);
+    const { data: credit } = await supabase.from('credit_ledger')
+      .select('*').eq('store_id', req.params.id).order('created_at', { ascending: false }).limit(20);
+    res.json({ store, recent_orders: orders, credit_history: credit });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/admin/stores/:id/approve', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { tier = 'bronze', credit_limit = 0, notes } = req.body;
+    const { data: store } = await supabase.from('customer_stores')
+      .update({ status: 'approved', tier, credit_limit, reviewed_by: req.user.id, reviewed_at: new Date().toISOString(), notes })
+      .eq('id', req.params.id)
+      .select('*, users!inner(id, name, phone)')
+      .single();
+
+    await createNotification(store.users.id, 'store_approved',
+      '✅ Toko Disetujui!', `Toko ${store.store_name} telah diverifikasi. Tier: ${tier.toUpperCase()}`, { tier });
+
+    const waNum = store.whatsapp || store.users.phone;
+    if (waNum) {
+      await sendWhatsApp(waNum,
+        `Halo ${store.owner_name}! 🎉\n\nToko *${store.store_name}* telah berhasil diverifikasi di SnackHub.\n\nTier Anda: *${tier.toUpperCase()}*\nLimit Kredit: *Rp ${Number(credit_limit).toLocaleString('id-ID')}*\n\nSilakan login dan mulai berbelanja!\nhttps://snackhub.id`,
+        store.id
+      );
+    }
+
+    await supabase.from('activity_log').insert({
+      user_id: req.user.id, action: 'approve_store', entity_type: 'store', entity_id: req.params.id,
+    });
+
+    res.json({ message: 'Toko berhasil disetujui', store });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/admin/stores/:id/reject', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { reason } = req.body;
+    if (!reason) return res.status(400).json({ error: 'Alasan penolakan wajib diisi' });
+
+    const { data: store } = await supabase.from('customer_stores')
+      .update({ status: 'rejected', rejection_reason: reason, reviewed_by: req.user.id, reviewed_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .select('*, users!inner(id, name, phone)')
+      .single();
+
+    await createNotification(store.users.id, 'store_rejected',
+      '❌ Verifikasi Ditolak', `Alasan: ${reason}. Silakan perbaiki dan kirim ulang.`, { reason });
+
+    const waNum = store.whatsapp || store.users.phone;
+    if (waNum) {
+      await sendWhatsApp(waNum,
+        `Halo ${store.owner_name},\n\nMaaf, verifikasi toko *${store.store_name}* belum dapat kami setujui.\n\nAlasan: ${reason}\n\nSilakan perbaiki dokumen dan submit ulang di aplikasi SnackHub.`,
+        store.id
+      );
+    }
+
+    res.json({ message: 'Toko ditolak', store });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/admin/stores/:id/tier', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { tier, credit_limit, credit_due_days } = req.body;
+    const updates = {};
+    if (tier) updates.tier = tier;
+    if (credit_limit !== undefined) updates.credit_limit = credit_limit;
+    if (credit_due_days !== undefined) updates.credit_due_days = credit_due_days;
+
+    const { data } = await supabase.from('customer_stores').update(updates).eq('id', req.params.id).select().single();
+    await supabase.from('activity_log').insert({
+      user_id: req.user.id, action: 'update_tier', entity_type: 'store', entity_id: req.params.id, new_value: updates,
+    });
+    res.json({ store: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════
+// SUPPLIERS (legacy endpoints — mapped to customer_stores)
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/suppliers', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { search, status, page = 1, limit = 20 } = req.query;
+    let q = supabase.from('v_stores_full').select('*', { count: 'exact' });
+    if (status) q = q.eq('status', status);
+    if (search) q = q.or(`store_name.ilike.%${search}%,owner_name.ilike.%${search}%,email.ilike.%${search}%`);
+    const offset = (page - 1) * limit;
+    const { data, count, error } = await q.range(offset, offset + limit - 1).order('created_at', { ascending: false });
+    if (error) throw error;
+    // Map to old shape for frontend compatibility
+    const suppliers = (data || []).map(s => ({
+      ...s,
+      company_name: s.store_name,
+      current_credit: s.credit_used,
+      address: s.address_line,
+    }));
+    res.json({ suppliers, total: count });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/suppliers/:id', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { data: store } = await supabase.from('v_stores_full').select('*').eq('id', req.params.id).single();
+    if (!store) return res.status(404).json({ error: 'Supplier not found' });
+
+    const { data: orders } = await supabase.from('orders')
+      .select('id, order_number, status, total, created_at')
+      .eq('store_id', req.params.id)
       .order('created_at', { ascending: false });
 
-    if (category) {
-      query = query.eq('category_id', category);
-    }
-
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%,description.ilike.%${search}%`);
-    }
-
-    if (low_stock === 'true') {
-      query = query.lte('stock_quantity', 'reorder_level');
-    }
-
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
-    query = query.range(from, to);
-
-    const { data: products, error, count } = await query;
-
-    if (error) throw error;
+    const completed = orders?.filter(o => o.status === 'completed') || [];
+    const totalSpent = completed.reduce((sum, o) => sum + o.total, 0);
 
     res.json({
-      products,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total: count,
-        totalPages: Math.ceil(count / limit)
-      }
+      supplier: { ...store, company_name: store.store_name, current_credit: store.credit_used, address: store.address_line },
+      orders: orders || [],
+      stats: { totalOrders: orders?.length || 0, totalSpent, completedOrders: completed.length },
     });
-  } catch (error) {
-    console.error('Get products error:', error);
-    res.status(500).json({ error: 'Failed to get products' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Get single product
-app.get('/api/products/:id', authenticateToken, async (req, res) => {
+app.patch('/api/suppliers/:id/credit', auth, requireRole(['admin']), async (req, res) => {
   try {
-    const { data: product, error } = await supabase
-      .from('products')
-      .select('*, categories(*), stock_history(*)')
+    const { credit_limit } = req.body;
+    const { data } = await supabase.from('customer_stores')
+      .update({ credit_limit: parseFloat(credit_limit) })
       .eq('id', req.params.id)
+      .select()
       .single();
+    res.json({ supplier: { ...data, company_name: data.store_name, current_credit: data.credit_used } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
-    if (error || !product) {
-      return res.status(404).json({ error: 'Product not found' });
+// ════════════════════════════════════════════════════════════════
+// PRODUCTS
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/products', auth, async (req, res) => {
+  try {
+    const { search, category, page = 1, limit = 24 } = req.query;
+
+    let q = supabase
+      .from('products')
+      .select('*, categories(id,name,slug), price_tiers(tier,price_per_karton,price_per_pack,price_per_pcs,min_karton)', { count: 'exact' })
+      .eq('is_active', true);
+
+    if (search) q = q.ilike('name', `%${search}%`);
+    if (category) q = q.eq('category_id', category);
+
+    const offset = (page - 1) * limit;
+    const { data, count, error } = await q.range(offset, offset + limit - 1).order('created_at', { ascending: false });
+    if (error) throw error;
+
+    // Resolve tier pricing
+    let customerTier = null;
+    let storeApproved = false;
+    if (req.user.role === 'customer') {
+      const { data: store } = await supabase.from('customer_stores').select('tier,status').eq('user_id', req.user.id).single();
+      storeApproved = store?.status === 'approved';
+      customerTier = store?.tier || 'bronze';
+    } else {
+      storeApproved = true;
+      customerTier = 'gold'; // admin sees gold price as reference
     }
 
-    res.json({ product });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to get product' });
+    const products = (data || []).map(p => {
+      const tierPrice = p.price_tiers?.find(t => t.tier === customerTier);
+      return {
+        ...p,
+        // Legacy field names for frontend compatibility
+        price: storeApproved ? (tierPrice?.price_per_karton || null) : null,
+        wholesale_price: storeApproved ? (tierPrice?.price_per_karton || null) : null,
+        stock_quantity: p.stock_karton,
+        price_hidden: !storeApproved,
+        price_tiers: ['admin','staff'].includes(req.user.role) ? p.price_tiers : undefined,
+      };
+    });
+
+    res.json({ products, total: count, page: Number(page), limit: Number(limit) });
+  } catch (e) {
+    console.error('Get products error:', e);
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Create product (Admin only)
-app.post('/api/products',
-  authenticateToken,
-  requireRole(['admin', 'staff']),
+app.get('/api/products/:id', auth, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*, categories(*), price_tiers(*)')
+      .eq('id', req.params.id)
+      .single();
+    if (error) return res.status(404).json({ error: 'Product not found' });
+    res.json({ product: { ...data, stock_quantity: data.stock_karton, price: data.price_tiers?.[0]?.price_per_karton } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/products', auth, requireRole(['admin','staff']),
   upload.single('image'),
   async (req, res) => {
     try {
-      const {
-        name, sku, description, category_id,
-        price, wholesale_price, wholesale_price_tier2,
-        stock_quantity, reorder_level, unit, weight
-      } = req.body;
+      const { price_tiers, ...productData } = req.body;
 
-      let image_url = null;
+      // Parse numeric fields
+      if (productData.pcs_per_pack) productData.pcs_per_pack = parseInt(productData.pcs_per_pack);
+      if (productData.pack_per_karton) productData.pack_per_karton = parseInt(productData.pack_per_karton);
+      if (productData.stock_karton) productData.stock_karton = parseInt(productData.stock_karton);
+      if (productData.reorder_level) productData.reorder_level = parseInt(productData.reorder_level);
+      if (productData.weight_gram) productData.weight_gram = parseInt(productData.weight_gram);
 
-      // Upload image if provided
-      if (req.file) {
-        const fileExt = path.extname(req.file.originalname);
-        const fileName = `${uuidv4()}${fileExt}`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('products')
-          .upload(fileName, req.file.buffer, {
-            contentType: req.file.mimetype
-          });
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('products')
-          .getPublicUrl(fileName);
-
-        image_url = publicUrl;
+      // Handle legacy field names from frontend
+      if (productData.stock_quantity && !productData.stock_karton) {
+        productData.stock_karton = parseInt(productData.stock_quantity);
+        delete productData.stock_quantity;
+      }
+      if (productData.wholesale_price && !productData.price_per_karton) {
+        delete productData.wholesale_price; // handled via price_tiers
       }
 
-      const { data: product, error } = await supabase
-        .from('products')
-        .insert([{
-          id: uuidv4(),
-          name,
-          sku,
-          description,
-          category_id,
-          price: parseFloat(price),
-          wholesale_price: parseFloat(wholesale_price),
-          wholesale_price_tier2: wholesale_price_tier2 ? parseFloat(wholesale_price_tier2) : null,
-          stock_quantity: parseInt(stock_quantity) || 0,
-          reorder_level: parseInt(reorder_level) || 10,
-          unit,
-          weight: weight ? parseFloat(weight) : null,
-          image_url,
-          is_active: true,
-          created_at: new Date().toISOString()
-        }])
-        .select()
-        .single();
+      if (req.file) {
+        const publicId = `product_${Date.now()}`;
+        productData.image_url = await uploadProductImage(req.file.buffer, req.file.mimetype, publicId);
+      }
 
+      const { data: product, error } = await supabase.from('products').insert(productData).select().single();
       if (error) throw error;
 
-      // Add stock history entry
-      if (parseInt(stock_quantity) > 0) {
-        await supabase.from('stock_history').insert([{
-          id: uuidv4(),
-          product_id: product.id,
-          type: 'incoming',
-          quantity: parseInt(stock_quantity),
-          reason: 'Initial stock',
-          created_by: req.user.userId,
-          created_at: new Date().toISOString()
-        }]);
+      // Insert price tiers
+      const tiers = typeof price_tiers === 'string' ? JSON.parse(price_tiers) : price_tiers;
+      if (Array.isArray(tiers) && tiers.length) {
+        await supabase.from('price_tiers').insert(tiers.map(t => ({ ...t, product_id: product.id })));
       }
 
       res.status(201).json({ product });
-    } catch (error) {
-      console.error('Create product error:', error);
-      res.status(500).json({ error: 'Failed to create product' });
+    } catch (e) {
+      console.error('Create product error:', e);
+      res.status(500).json({ error: e.message });
     }
   }
 );
 
-// Update product
-app.put('/api/products/:id',
-  authenticateToken,
-  requireRole(['admin', 'staff']),
-  upload.single('image'),
-  async (req, res) => {
-    try {
-      const { id } = req.params;
-      const updateData = { ...req.body };
-
-      // Handle numeric fields
-      if (updateData.price) updateData.price = parseFloat(updateData.price);
-      if (updateData.wholesale_price) updateData.wholesale_price = parseFloat(updateData.wholesale_price);
-      if (updateData.stock_quantity) updateData.stock_quantity = parseInt(updateData.stock_quantity);
-      if (updateData.reorder_level) updateData.reorder_level = parseInt(updateData.reorder_level);
-
-      // Upload new image if provided
-      if (req.file) {
-        const fileExt = path.extname(req.file.originalname);
-        const fileName = `${uuidv4()}${fileExt}`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('products')
-          .upload(fileName, req.file.buffer, {
-            contentType: req.file.mimetype
-          });
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('products')
-          .getPublicUrl(fileName);
-
-        updateData.image_url = publicUrl;
-      }
-
-      updateData.updated_at = new Date().toISOString();
-
-      const { data: product, error } = await supabase
-        .from('products')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      res.json({ product });
-    } catch (error) {
-      console.error('Update product error:', error);
-      res.status(500).json({ error: 'Failed to update product' });
-    }
-  }
-);
-
-// Delete product (soft delete)
-app.delete('/api/products/:id',
-  authenticateToken,
-  requireRole(['admin']),
-  async (req, res) => {
-    try {
-      const { error } = await supabase
-        .from('products')
-        .update({ is_active: false, updated_at: new Date().toISOString() })
-        .eq('id', req.params.id);
-
-      if (error) throw error;
-
-      res.json({ message: 'Product deleted successfully' });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete product' });
-    }
-  }
-);
-
-// ==================== CATEGORY ROUTES ====================
-
-app.get('/api/categories', authenticateToken, async (req, res) => {
+app.put('/api/products/:id', auth, requireRole(['admin','staff']), async (req, res) => {
   try {
-    const { data: categories, error } = await supabase
-      .from('categories')
-      .select('*')
-      .eq('is_active', true)
-      .order('name');
+    const { price_tiers, ...productData } = req.body;
 
+    // Handle legacy field names
+    if (productData.stock_quantity !== undefined) {
+      productData.stock_karton = parseInt(productData.stock_quantity);
+      delete productData.stock_quantity;
+    }
+
+    const { data: product, error } = await supabase.from('products').update(productData).eq('id', req.params.id).select().single();
     if (error) throw error;
 
-    res.json({ categories });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to get categories' });
+    if (price_tiers) {
+      const tiers = typeof price_tiers === 'string' ? JSON.parse(price_tiers) : price_tiers;
+      for (const t of tiers) {
+        await supabase.from('price_tiers').upsert({ ...t, product_id: req.params.id }, { onConflict: 'product_id,tier' });
+      }
+    }
+
+    res.json({ product });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-app.post('/api/categories',
-  authenticateToken,
-  requireRole(['admin', 'staff']),
-  async (req, res) => {
-    try {
-      const { name, description } = req.body;
-
-      const { data: category, error } = await supabase
-        .from('categories')
-        .insert([{
-          id: uuidv4(),
-          name,
-          description,
-          is_active: true,
-          created_at: new Date().toISOString()
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      res.status(201).json({ category });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to create category' });
-    }
-  }
-);
-
-// ==================== INVENTORY ROUTES ====================
-
-// Get inventory status
-app.get('/api/inventory', authenticateToken, requireRole(['admin', 'staff']), async (req, res) => {
+app.put('/api/products/:id/prices', auth, requireRole(['admin']), async (req, res) => {
   try {
-    const { data: products, error } = await supabase
+    const { price_tiers } = req.body;
+    for (const t of price_tiers) {
+      await supabase.from('price_tiers').upsert({ ...t, product_id: req.params.id }, { onConflict: 'product_id,tier' });
+    }
+    const { data } = await supabase.from('price_tiers').select('*').eq('product_id', req.params.id);
+    res.json({ price_tiers: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/products/:id', auth, requireRole(['admin']), async (req, res) => {
+  await supabase.from('products').update({ is_active: false }).eq('id', req.params.id);
+  res.json({ message: 'Produk dinonaktifkan' });
+});
+
+// ════════════════════════════════════════════════════════════════
+// CATEGORIES
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/categories', auth, async (req, res) => {
+  const { data, error } = await supabase.from('categories').select('*').eq('is_active', true).order('sort_order');
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ categories: data });
+});
+
+app.post('/api/categories', auth, requireRole(['admin','staff']), async (req, res) => {
+  const { data, error } = await supabase.from('categories').insert(req.body).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json({ category: data });
+});
+
+app.put('/api/categories/:id', auth, requireRole(['admin','staff']), async (req, res) => {
+  const { data, error } = await supabase.from('categories').update(req.body).eq('id', req.params.id).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ category: data });
+});
+
+// ════════════════════════════════════════════════════════════════
+// INVENTORY
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/inventory', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { data, error } = await supabase
       .from('products')
-      .select('id, name, sku, stock_quantity, reorder_level, unit, image_url')
+      .select('id, name, sku, stock_karton, stock_pack, reorder_level, unit_type, pack_per_karton, categories(name)')
       .eq('is_active', true)
-      .order('stock_quantity', { ascending: true });
-
+      .order('stock_karton', { ascending: true });
     if (error) throw error;
-
-    const lowStock = products.filter(p => p.stock_quantity <= p.reorder_level);
-    const outOfStock = products.filter(p => p.stock_quantity === 0);
-
-    res.json({
-      inventory: products,
-      summary: {
-        total: products.length,
-        lowStock: lowStock.length,
-        outOfStock: outOfStock.length
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to get inventory' });
+    // Add legacy field
+    const inventory = (data || []).map(p => ({ ...p, stock_quantity: p.stock_karton }));
+    res.json({ products: inventory, inventory });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Stock adjustment
-app.post('/api/inventory/adjust',
-  authenticateToken,
-  requireRole(['admin', 'staff']),
-  async (req, res) => {
-    try {
-      const { product_id, type, quantity, reason, warehouse_id } = req.body;
-
-      // Get current stock
-      const { data: product, error: productError } = await supabase
-        .from('products')
-        .select('stock_quantity')
-        .eq('id', product_id)
-        .single();
-
-      if (productError || !product) {
-        return res.status(404).json({ error: 'Product not found' });
-      }
-
-      // Calculate new quantity
-      let newQuantity = product.stock_quantity;
-      if (type === 'incoming') {
-        newQuantity += parseInt(quantity);
-      } else if (type === 'outgoing') {
-        newQuantity -= parseInt(quantity);
-      } else if (type === 'adjustment') {
-        newQuantity = parseInt(quantity);
-      }
-
-      if (newQuantity < 0) {
-        return res.status(400).json({ error: 'Insufficient stock' });
-      }
-
-      // Update product stock
-      const { error: updateError } = await supabase
-        .from('products')
-        .update({ 
-          stock_quantity: newQuantity,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', product_id);
-
-      if (updateError) throw updateError;
-
-      // Add stock history
-      const { data: history, error: historyError } = await supabase
-        .from('stock_history')
-        .insert([{
-          id: uuidv4(),
-          product_id,
-          warehouse_id: warehouse_id || null,
-          type,
-          quantity: parseInt(quantity),
-          previous_quantity: product.stock_quantity,
-          new_quantity: newQuantity,
-          reason,
-          created_by: req.user.userId,
-          created_at: new Date().toISOString()
-        }])
-        .select()
-        .single();
-
-      if (historyError) throw historyError;
-
-      res.json({ 
-        message: 'Stock adjusted successfully',
-        history,
-        new_quantity: newQuantity
-      });
-    } catch (error) {
-      console.error('Stock adjustment error:', error);
-      res.status(500).json({ error: 'Failed to adjust stock' });
-    }
-  }
-);
-
-// Get stock history
-app.get('/api/inventory/history', authenticateToken, requireRole(['admin', 'staff']), async (req, res) => {
-  const { product_id, page = 1, limit = 20 } = req.query;
-
+app.post('/api/inventory/adjust', auth, requireRole(['admin','staff']), async (req, res) => {
   try {
-    let query = supabase
-      .from('stock_history')
-      .select('*, products(name, sku), users(name)', { count: 'exact' })
-      .order('created_at', { ascending: false });
+    const { product_id, type, quantity, qty_karton, notes, warehouse_id } = req.body;
+    const qty = qty_karton || quantity || 0;
 
-    if (product_id) {
-      query = query.eq('product_id', product_id);
-    }
+    const { data: product } = await supabase.from('products').select('stock_karton').eq('id', product_id).single();
+    const isIncoming = ['purchase_in','adjustment_in','transfer_in','return_in'].includes(type) || type === 'incoming';
+    const newStock = isIncoming ? product.stock_karton + qty : product.stock_karton - qty;
 
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
-    query = query.range(from, to);
-
-    const { data: history, error, count } = await query;
-
-    if (error) throw error;
-
-    res.json({
-      history,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total: count,
-        totalPages: Math.ceil(count / limit)
-      }
+    await supabase.from('products').update({ stock_karton: newStock }).eq('id', product_id);
+    await supabase.from('stock_movements').insert({
+      product_id,
+      type: type === 'incoming' ? 'purchase_in' : type === 'outgoing' ? 'adjustment_out' : type,
+      qty_karton: qty,
+      stock_before: product.stock_karton,
+      stock_after: newStock,
+      warehouse_id: warehouse_id || null,
+      notes,
+      created_by: req.user.id,
     });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to get stock history' });
+
+    res.json({ message: 'Stok berhasil diperbarui', new_stock: newStock });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-// ==================== ORDER ROUTES ====================
-
-// Get all orders
-app.get('/api/orders', authenticateToken, async (req, res) => {
-  const { status, supplier_id, page = 1, limit = 20 } = req.query;
-
+app.get('/api/inventory/history', auth, requireRole(['admin','staff']), async (req, res) => {
   try {
-    let query = supabase
-      .from('orders')
-      .select('*, users(name, company_name)', { count: 'exact' })
-      .order('created_at', { ascending: false });
-
-    // Suppliers can only see their own orders
-    if (req.user.role === 'supplier') {
-      query = query.eq('supplier_id', req.user.userId);
-    }
-
-    if (status) {
-      query = query.eq('status', status);
-    }
-
-    if (supplier_id && req.user.role !== 'supplier') {
-      query = query.eq('supplier_id', supplier_id);
-    }
-
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
-    query = query.range(from, to);
-
-    const { data: orders, error, count } = await query;
-
+    const { product_id, page = 1, limit = 50 } = req.query;
+    let q = supabase.from('stock_movements').select('*, products(name,sku), users(name)');
+    if (product_id) q = q.eq('product_id', product_id);
+    const offset = (page - 1) * limit;
+    const { data, error } = await q.range(offset, offset + limit - 1).order('created_at', { ascending: false });
     if (error) throw error;
-
-    res.json({
-      orders,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total: count,
-        totalPages: Math.ceil(count / limit)
-      }
-    });
-  } catch (error) {
-    console.error('Get orders error:', error);
-    res.status(500).json({ error: 'Failed to get orders' });
+    res.json({ history: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Get single order
-app.get('/api/orders/:id', authenticateToken, async (req, res) => {
-  try {
-    const { data: order, error } = await supabase
-      .from('orders')
-      .select('*, users(name, company_name, email, phone, address), order_items(*, products(name, sku, image_url))')
-      .eq('id', req.params.id)
-      .single();
+// ════════════════════════════════════════════════════════════════
+// SHIPPING & REGIONS
+// ════════════════════════════════════════════════════════════════
 
-    if (error || !order) {
-      return res.status(404).json({ error: 'Order not found' });
+app.post('/api/shipping/calculate', auth, async (req, res) => {
+  try {
+    const { province_id, total_weight_kg } = req.body;
+    const zoneMap = {
+      jawa:         [1,2,3,4,5,6],
+      bali_ntt_ntb: [7,8,9],
+      sumatera:     [10,11,12,13,14,15,16,17,18,19],
+      kalimantan:   [20,21,22,23,24],
+      sulawesi:     [25,26,27,28,29,30],
+      maluku_papua: [31,32,33,34],
+    };
+    let zone = 'jawa';
+    for (const [z, provs] of Object.entries(zoneMap)) {
+      if (provs.includes(Number(province_id))) { zone = z; break; }
+    }
+    const { data: rates } = await supabase.from('shipping_rates').select('*').eq('zone', zone).eq('is_active', true).order('rate_per_kg');
+    const weight = Math.max(1, total_weight_kg || 1);
+    const options = (rates || []).map(r => ({
+      courier: r.courier,
+      service: r.service,
+      etd: `${r.etd_days_min}-${r.etd_days_max} hari`,
+      cost: Math.ceil(weight * r.rate_per_kg / 1000) * 1000,
+      is_cod: r.is_cod_available,
+    }));
+    res.json({ zone, options });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/regions/provinces', auth, async (req, res) => {
+  const { data } = await supabase.from('provinces').select('*').order('name');
+  res.json({ provinces: data });
+});
+
+app.get('/api/regions/cities', auth, async (req, res) => {
+  const { province_id } = req.query;
+  let q = supabase.from('cities').select('*').eq('is_active', true).order('name');
+  if (province_id) q = q.eq('province_id', province_id);
+  const { data } = await q;
+  res.json({ cities: data });
+});
+
+// ════════════════════════════════════════════════════════════════
+// ORDERS
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/orders', auth, async (req, res) => {
+  try {
+    const { status, payment_status, page = 1, limit = 20 } = req.query;
+    let q = supabase.from('v_orders_summary').select('*', { count: 'exact' });
+
+    if (req.user.role === 'customer') {
+      const { data: store } = await supabase.from('customer_stores').select('id').eq('user_id', req.user.id).single();
+      if (!store) return res.json({ orders: [], total: 0 });
+      q = q.eq('store_id', store.id);
     }
 
-    // Check permission
-    if (req.user.role === 'supplier' && order.supplier_id !== req.user.userId) {
-      return res.status(403).json({ error: 'Access denied' });
+    if (status) q = q.eq('status', status);
+    if (payment_status) q = q.eq('payment_status', payment_status);
+
+    const offset = (page - 1) * limit;
+    const { data, count, error } = await q.range(offset, offset + limit - 1).order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json({ orders: data, total: count, pagination: { page: Number(page), limit: Number(limit), total: count } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/orders/:id', auth, async (req, res) => {
+  try {
+    const { data: order, error } = await supabase.from('orders').select(`
+      *,
+      customer_stores(store_name, owner_name, whatsapp, tier),
+      order_items(*, products(name, sku, image_url)),
+      order_status_history(status, notes, created_at, users(name))
+    `).eq('id', req.params.id).single();
+
+    if (error) return res.status(404).json({ error: 'Order not found' });
+
+    if (req.user.role === 'customer') {
+      const { data: store } = await supabase.from('customer_stores').select('id').eq('user_id', req.user.id).single();
+      if (order.store_id !== store?.id) return res.status(403).json({ error: 'Forbidden' });
     }
 
     res.json({ order });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to get order' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Create order (Supplier)
-app.post('/api/orders',
-  authenticateToken,
-  requireRole(['supplier']),
-  async (req, res) => {
-    try {
-      const { items, notes, shipping_address } = req.body;
-
-      if (!items || items.length === 0) {
-        return res.status(400).json({ error: 'Order items are required' });
-      }
-
-      // Calculate totals and validate stock
-      let subtotal = 0;
-      const orderItems = [];
-
-      for (const item of items) {
-        const { data: product, error: productError } = await supabase
-          .from('products')
-          .select('id, name, price, wholesale_price, stock_quantity, unit')
-          .eq('id', item.product_id)
-          .single();
-
-        if (productError || !product) {
-          return res.status(404).json({ error: `Product not found: ${item.product_id}` });
-        }
-
-        if (product.stock_quantity < item.quantity) {
-          return res.status(400).json({ 
-            error: `Insufficient stock for ${product.name}. Available: ${product.stock_quantity}` 
-          });
-        }
-
-        const unitPrice = product.wholesale_price || product.price;
-        const itemTotal = unitPrice * item.quantity;
-        subtotal += itemTotal;
-
-        orderItems.push({
-          product_id: product.id,
-          product_name: product.name,
-          quantity: item.quantity,
-          unit_price: unitPrice,
-          total_price: itemTotal,
-          unit: product.unit
-        });
-      }
-
-      const tax = subtotal * 0.1; // 10% tax
-      const total = subtotal + tax;
-
-      // Get user info for shipping
-      const { data: user } = await supabase
-        .from('users')
-        .select('address')
-        .eq('id', req.user.userId)
-        .single();
-
-      // Create order
-      const orderId = uuidv4();
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert([{
-          id: orderId,
-          supplier_id: req.user.userId,
-          status: 'pending',
-          subtotal,
-          tax,
-          total,
-          notes,
-          shipping_address: shipping_address || user?.address,
-          created_at: new Date().toISOString()
-        }])
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
-
-      // Create order items
-      const orderItemsWithId = orderItems.map(item => ({
-        id: uuidv4(),
-        order_id: orderId,
-        ...item,
-        created_at: new Date().toISOString()
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItemsWithId);
-
-      if (itemsError) throw itemsError;
-
-      // Reserve stock (reduce available quantity)
-      for (const item of items) {
-        const { data: product } = await supabase
-          .from('products')
-          .select('stock_quantity')
-          .eq('id', item.product_id)
-          .single();
-
-        await supabase
-          .from('products')
-          .update({ 
-            stock_quantity: product.stock_quantity - item.quantity,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', item.product_id);
-
-        // Add stock history
-        await supabase.from('stock_history').insert([{
-          id: uuidv4(),
-          product_id: item.product_id,
-          type: 'outgoing',
-          quantity: item.quantity,
-          reason: `Order #${orderId.slice(0, 8)}`,
-          created_by: req.user.userId,
-          created_at: new Date().toISOString()
-        }]);
-      }
-
-      res.status(201).json({ 
-        message: 'Order created successfully',
-        order
-      });
-    } catch (error) {
-      console.error('Create order error:', error);
-      res.status(500).json({ error: 'Failed to create order' });
-    }
-  }
-);
-
-// Update order status (Admin/Staff)
-app.patch('/api/orders/:id/status',
-  authenticateToken,
-  requireRole(['admin', 'staff']),
-  async (req, res) => {
-    try {
-      const { status, notes } = req.body;
-      const validStatuses = ['pending', 'approved', 'packed', 'shipped', 'completed', 'cancelled'];
-
-      if (!validStatuses.includes(status)) {
-        return res.status(400).json({ error: 'Invalid status' });
-      }
-
-      const updateData = {
-        status,
-        updated_at: new Date().toISOString()
-      };
-
-      if (status === 'approved') {
-        updateData.approved_at = new Date().toISOString();
-        updateData.approved_by = req.user.userId;
-      } else if (status === 'shipped') {
-        updateData.shipped_at = new Date().toISOString();
-      } else if (status === 'completed') {
-        updateData.completed_at = new Date().toISOString();
-      }
-
-      const { data: order, error } = await supabase
-        .from('orders')
-        .update(updateData)
-        .eq('id', req.params.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Add status history
-      await supabase.from('order_status_history').insert([{
-        id: uuidv4(),
-        order_id: req.params.id,
-        status,
-        notes,
-        created_by: req.user.userId,
-        created_at: new Date().toISOString()
-      }]);
-
-      res.json({ order });
-    } catch (error) {
-      console.error('Update order status error:', error);
-      res.status(500).json({ error: 'Failed to update order status' });
-    }
-  }
-);
-
-// ==================== SUPPLIER ROUTES ====================
-
-// Get all suppliers (Admin/Staff only)
-app.get('/api/suppliers',
-  authenticateToken,
-  requireRole(['admin', 'staff']),
-  async (req, res) => {
-    try {
-      const { data: suppliers, error } = await supabase
-        .from('users')
-        .select('id, name, company_name, email, phone, address, credit_limit, current_credit, status, created_at')
-        .eq('role', 'supplier')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      res.json({ suppliers });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to get suppliers' });
-    }
-  }
-);
-
-// Get supplier details with order history
-app.get('/api/suppliers/:id',
-  authenticateToken,
-  requireRole(['admin', 'staff']),
-  async (req, res) => {
-    try {
-      const { data: supplier, error } = await supabase
-        .from('users')
-        .select('id, name, company_name, email, phone, address, credit_limit, current_credit, status, created_at')
-        .eq('id', req.params.id)
-        .eq('role', 'supplier')
-        .single();
-
-      if (error || !supplier) {
-        return res.status(404).json({ error: 'Supplier not found' });
-      }
-
-      // Get order history
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('id, status, total, created_at')
-        .eq('supplier_id', req.params.id)
-        .order('created_at', { ascending: false });
-
-      // Get total stats
-      const { data: stats } = await supabase
-        .from('orders')
-        .select('total')
-        .eq('supplier_id', req.params.id)
-        .eq('status', 'completed');
-
-      const totalSpent = stats?.reduce((sum, o) => sum + o.total, 0) || 0;
-
-      res.json({
-        supplier,
-        orders: orders || [],
-        stats: {
-          totalOrders: orders?.length || 0,
-          totalSpent,
-          completedOrders: stats?.length || 0
-        }
-      });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to get supplier details' });
-    }
-  }
-);
-
-// Update supplier credit
-app.patch('/api/suppliers/:id/credit',
-  authenticateToken,
-  requireRole(['admin']),
-  async (req, res) => {
-    try {
-      const { credit_limit } = req.body;
-
-      const { data: supplier, error } = await supabase
-        .from('users')
-        .update({ 
-          credit_limit: parseFloat(credit_limit),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', req.params.id)
-        .eq('role', 'supplier')
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      res.json({ supplier });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to update credit limit' });
-    }
-  }
-);
-
-// ==================== PAYMENT ROUTES ====================
-
-// Get payments
-app.get('/api/payments', authenticateToken, async (req, res) => {
-  const { status, page = 1, limit = 20 } = req.query;
-
+app.post('/api/orders', auth, role('customer'), async (req, res) => {
   try {
-    let query = supabase
-      .from('payments')
-      .select('*, orders(total), users(name, company_name)', { count: 'exact' })
+    const { items, payment_method, shipping_address, courier, courier_service, notes, promo_code, use_credit } = req.body;
+
+    const { data: store } = await supabase.from('customer_stores').select('*').eq('user_id', req.user.id).single();
+    if (!store || store.status !== 'approved')
+      return res.status(403).json({ error: 'Toko belum diverifikasi. Selesaikan proses onboarding terlebih dahulu.' });
+
+    let subtotal = 0;
+    const orderItems = [];
+
+    for (const item of items) {
+      const { data: product } = await supabase.from('products').select('*, price_tiers(*)').eq('id', item.product_id).single();
+      if (!product?.is_active) return res.status(400).json({ error: `Produk tidak tersedia` });
+
+      const qty = item.qty_karton || item.quantity || 1;
+      if (product.stock_karton < qty)
+        return res.status(400).json({ error: `Stok ${product.name} tidak cukup (tersedia: ${product.stock_karton} karton)` });
+
+      const tierPrice = product.price_tiers?.find(t => t.tier === store.tier);
+      if (!tierPrice)
+        return res.status(400).json({ error: `Harga untuk tier ${store.tier} belum dikonfigurasi pada produk ${product.name}` });
+
+      const itemSubtotal = tierPrice.price_per_karton * qty;
+      subtotal += itemSubtotal;
+      orderItems.push({
+        product_id: product.id,
+        product_name: product.name,
+        product_sku: product.sku,
+        qty_karton: qty,
+        tier_applied: store.tier,
+        price_per_karton: tierPrice.price_per_karton,
+        subtotal: itemSubtotal,
+        weight_kg: product.weight_karton_gram ? (product.weight_karton_gram / 1000) * qty : 0,
+      });
+    }
+
+    // Minimum order check
+    const { data: minSetting } = await supabase.from('settings').select('value').eq('key', 'min_order_value').single();
+    const minOrder = minSetting?.value?.amount || 0;
+    if (subtotal < minOrder)
+      return res.status(400).json({ error: `Minimum order Rp ${minOrder.toLocaleString('id-ID')}` });
+
+    // Shipping cost (simplified)
+    let shippingCost = 0;
+    if (shipping_address?.province_id && courier) {
+      const totalWeight = orderItems.reduce((s, i) => s + (i.weight_kg || 0), 0);
+      const zoneMap = { jawa:[1,2,3,4,5,6], bali_ntt_ntb:[7,8,9], sumatera:[10,11,12,13,14,15,16,17,18,19], kalimantan:[20,21,22,23,24], sulawesi:[25,26,27,28,29,30], maluku_papua:[31,32,33,34] };
+      let zone = 'jawa';
+      for (const [z, provs] of Object.entries(zoneMap)) { if (provs.includes(Number(shipping_address.province_id))) { zone = z; break; } }
+      const { data: rate } = await supabase.from('shipping_rates').select('rate_per_kg').eq('zone', zone).eq('courier', courier).eq('service', courier_service || 'reg').single();
+      if (rate) shippingCost = Math.ceil(Math.max(1, totalWeight) * rate.rate_per_kg / 1000) * 1000;
+    }
+
+    // Promo
+    let discountAmount = 0;
+    let promoId = null;
+    if (promo_code) {
+      const { data: promo } = await supabase.from('promos').select('*').eq('code', promo_code).eq('is_active', true).single();
+      if (promo && new Date(promo.valid_until) > new Date() && subtotal >= (promo.min_order_value || 0)) {
+        promoId = promo.id;
+        if (promo.type === 'percentage') discountAmount = Math.min(subtotal * promo.discount_percent / 100, promo.max_discount_cap || Infinity);
+        else if (promo.type === 'fixed_amount') discountAmount = promo.discount_amount;
+        else if (promo.type === 'free_shipping') shippingCost = 0;
+      }
+    }
+
+    const total = subtotal - discountAmount + shippingCost;
+
+    // Credit check
+    const isCreditOrder = !!use_credit && payment_method === 'credit_tempo';
+    if (isCreditOrder) {
+      const available = store.credit_limit - store.credit_used;
+      if (total > available)
+        return res.status(400).json({ error: `Limit kredit tidak cukup. Tersedia: Rp ${available.toLocaleString('id-ID')}` });
+    }
+
+    const { data: order, error: orderError } = await supabase.from('orders').insert({
+      store_id: store.id,
+      created_by: req.user.id,
+      status: 'pending',
+      payment_status: 'unpaid',
+      payment_method,
+      subtotal,
+      discount_amount: discountAmount,
+      shipping_cost: shippingCost,
+      total,
+      ship_to_name: shipping_address?.name || store.owner_name,
+      ship_to_phone: shipping_address?.phone || store.whatsapp,
+      ship_to_address: shipping_address?.address || store.address_line,
+      ship_to_city: shipping_address?.city,
+      ship_to_province: shipping_address?.province,
+      ship_to_postal: shipping_address?.postal_code,
+      courier,
+      courier_service,
+      is_credit_order: isCreditOrder,
+      credit_due_date: isCreditOrder
+        ? new Date(Date.now() + store.credit_due_days * 86400000).toISOString().split('T')[0]
+        : null,
+      notes,
+    }).select().single();
+
+    if (orderError) throw orderError;
+
+    await supabase.from('order_items').insert(orderItems.map(i => ({ ...i, order_id: order.id })));
+
+    // Decrement stock
+    for (const item of orderItems) {
+      await supabase.from('products').update({ stock_karton: supabase.rpc ? undefined : 0 }).eq('id', item.product_id);
+      // Direct update
+      const { data: p } = await supabase.from('products').select('stock_karton').eq('id', item.product_id).single();
+      await supabase.from('products').update({ stock_karton: p.stock_karton - item.qty_karton }).eq('id', item.product_id);
+
+      await supabase.from('stock_movements').insert({
+        product_id: item.product_id, type: 'order_out',
+        qty_karton: item.qty_karton, reference_type: 'order', reference_id: order.id,
+        created_by: req.user.id,
+      });
+    }
+
+    if (isCreditOrder) {
+      await supabase.from('customer_stores').update({ credit_used: store.credit_used + total }).eq('id', store.id);
+      await supabase.from('credit_ledger').insert({
+        store_id: store.id, type: 'order_credit',
+        debit: total, credit: 0, balance_after: store.credit_used + total,
+        reference_id: order.id, reference_type: 'order',
+        notes: `Order ${order.order_number}`,
+      });
+    }
+
+    if (promoId) {
+      await supabase.from('promo_usage').insert({ promo_id: promoId, store_id: store.id, order_id: order.id, discount_applied: discountAmount });
+    }
+
+    await supabase.from('order_status_history').insert({ order_id: order.id, status: 'pending', created_by: req.user.id });
+
+    const { data: admins } = await supabase.from('users').select('id').eq('role', 'admin');
+    for (const a of admins || []) {
+      await createNotification(a.id, 'new_order', '🛒 Order Baru',
+        `${order.order_number} dari ${store.store_name} — Rp ${total.toLocaleString('id-ID')}`, { order_id: order.id });
+    }
+
+    if (store.whatsapp) {
+      await sendWhatsApp(store.whatsapp,
+        `Halo ${store.owner_name}! 🎉\n\nOrder *${order.order_number}* berhasil dibuat.\nTotal: *Rp ${total.toLocaleString('id-ID')}*\n\nTim kami akan segera memproses pesanan Anda.`,
+        store.id
+      );
+    }
+
+    res.status(201).json({ order });
+  } catch (e) {
+    console.error('Create order error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/orders/:id/status', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { status, notes, tracking_number, courier, courier_service, estimated_delivery } = req.body;
+    const updates = { status };
+    if (tracking_number) updates.tracking_number = tracking_number;
+    if (courier) updates.courier = courier;
+    if (courier_service) updates.courier_service = courier_service;
+    if (estimated_delivery) updates.estimated_delivery = estimated_delivery;
+
+    const now = new Date().toISOString();
+    if (status === 'confirmed')  { updates.confirmed_at = now; updates.confirmed_by = req.user.id; }
+    if (status === 'packing')    { updates.packed_at = now; updates.packed_by = req.user.id; }
+    if (status === 'shipped')      updates.shipped_at = now;
+    if (status === 'delivered')    updates.delivered_at = now;
+    if (status === 'completed')    updates.payment_status = 'paid';
+    if (status === 'cancelled')  { updates.cancelled_at = now; updates.cancelled_by = req.user.id; updates.cancel_reason = notes; }
+
+    const { data: order, error } = await supabase.from('orders').update(updates).eq('id', req.params.id)
+      .select('*, customer_stores(store_name, owner_name, whatsapp, users!inner(id))')
+      .single();
+    if (error) throw error;
+
+    await supabase.from('order_status_history').insert({ order_id: order.id, status, notes, created_by: req.user.id });
+
+    const msgMap = {
+      confirmed:  ['order_confirmed', '✅ Pesanan Dikonfirmasi', 'Pesanan sedang diproses'],
+      shipped:    ['order_shipped',   '🚚 Pesanan Dikirim',     `No. resi: ${tracking_number || '-'}`],
+      delivered:  ['order_delivered', '📦 Pesanan Tiba',        'Pesanan Anda telah sampai!'],
+      cancelled:  ['order_confirmed', '❌ Pesanan Dibatalkan',   notes || 'Pesanan dibatalkan'],
+    };
+
+    if (msgMap[status]) {
+      const [type, title, msg] = msgMap[status];
+      await createNotification(order.customer_stores.users.id, type, title, msg, { order_id: order.id });
+      if (order.customer_stores.whatsapp) {
+        await sendWhatsApp(order.customer_stores.whatsapp,
+          `${title}\n\nOrder *${order.order_number}*\n${msg}`, order.store_id);
+      }
+    }
+
+    res.json({ order });
+  } catch (e) {
+    console.error('Update order status error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════
+// PAYMENTS
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/payments', auth, async (req, res) => {
+  try {
+    const { status, page = 1, limit = 20 } = req.query;
+    let q = supabase.from('payments')
+      .select('*, orders(order_number, total), customer_stores(store_name)', { count: 'exact' })
       .order('created_at', { ascending: false });
 
-    if (req.user.role === 'supplier') {
-      query = query.eq('supplier_id', req.user.userId);
+    if (req.user.role === 'customer') {
+      const { data: store } = await supabase.from('customer_stores').select('id').eq('user_id', req.user.id).single();
+      q = q.eq('store_id', store?.id);
     }
 
-    if (status) {
-      query = query.eq('status', status);
-    }
+    if (status) q = q.eq('status', status);
 
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
-    query = query.range(from, to);
+    const offset = (page - 1) * limit;
+    const { data, count, error } = await q.range(offset, offset + limit - 1);
+    if (error) throw error;
+    res.json({ payments: data, total: count, pagination: { page: Number(page), limit: Number(limit), total: count } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
-    const { data: payments, error, count } = await query;
+app.post('/api/payments', auth, role('customer'), upload.single('proof'), async (req, res) => {
+  try {
+    const { order_id, payment_method, amount, bank_from, account_from, transfer_date, notes } = req.body;
+
+    if (!req.file) return res.status(400).json({ error: 'Bukti pembayaran wajib diupload' });
+
+    const { data: store } = await supabase.from('customer_stores').select('id').eq('user_id', req.user.id).single();
+    const { data: order } = await supabase.from('orders').select('id,total,store_id,order_number').eq('id', order_id).single();
+    if (!order || order.store_id !== store?.id) return res.status(403).json({ error: 'Forbidden' });
+
+    const ext = req.file.originalname.split('.').pop();
+    const proof_url = await uploadFile(req.file.buffer, req.file.mimetype, 'payments', `${store.id}/${order_id}_${Date.now()}.${ext}`);
+
+    const { data: payment, error } = await supabase.from('payments').insert({
+      order_id, store_id: store.id, payment_method,
+      amount: Number(amount), bank_from, account_from,
+      transfer_date, proof_url, notes, status: 'pending',
+    }).select().single();
 
     if (error) throw error;
 
-    res.json({
-      payments,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total: count,
-        totalPages: Math.ceil(count / limit)
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to get payments' });
+    const { data: admins } = await supabase.from('users').select('id').eq('role', 'admin');
+    for (const a of admins || []) {
+      await createNotification(a.id, 'new_payment_proof', '💰 Bukti Pembayaran Masuk',
+        `Order ${order.order_number} — Rp ${Number(amount).toLocaleString('id-ID')}`, { payment_id: payment.id, order_id });
+    }
+
+    res.status(201).json({ payment });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Create payment (upload proof)
-app.post('/api/payments',
-  authenticateToken,
-  requireRole(['supplier']),
-  upload.single('proof'),
-  async (req, res) => {
-    try {
-      const { order_id, amount, payment_method, notes } = req.body;
+// Legacy endpoint: /payments/:id/status
+app.patch('/api/payments/:id/status', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { status, notes } = req.body;
+    if (!['approved','rejected'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
 
-      if (!req.file) {
-        return res.status(400).json({ error: 'Payment proof is required' });
-      }
+    const { data: payment, error } = await supabase.from('payments')
+      .update({ status: status === 'approved' ? 'verified' : 'rejected', notes, approved_by: req.user.id, approved_at: new Date().toISOString() })
+      .eq('id', req.params.id).select().single();
+    if (error) throw error;
 
-      // Verify order belongs to supplier
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .select('id, supplier_id, total, status')
-        .eq('id', order_id)
-        .single();
+    if (status === 'approved') {
+      await supabase.from('orders').update({ payment_status: 'paid' }).eq('id', payment.order_id);
+    }
+    res.json({ payment });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
-      if (orderError || !order) {
-        return res.status(404).json({ error: 'Order not found' });
-      }
+// New endpoint: /payments/:id/verify (with full credit handling)
+app.patch('/api/payments/:id/verify', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { action, rejection_reason } = req.body;
 
-      if (order.supplier_id !== req.user.userId) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
+    const { data: payment } = await supabase.from('payments')
+      .select('*, orders(id,total,total_paid,store_id,order_number,is_credit_order), customer_stores(owner_name,whatsapp,credit_used,users!inner(id))')
+      .eq('id', req.params.id).single();
 
-      // Upload proof image
-      const fileExt = path.extname(req.file.originalname);
-      const fileName = `payment-${uuidv4()}${fileExt}`;
-      
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('payments')
-        .upload(fileName, req.file.buffer, {
-          contentType: req.file.mimetype
+    if (action === 'verify') {
+      await supabase.from('payments').update({ status: 'verified', verified_by: req.user.id, verified_at: new Date().toISOString() }).eq('id', req.params.id);
+      const newPaid = (payment.orders.total_paid || 0) + payment.amount;
+      const newStatus = newPaid >= payment.orders.total ? 'paid' : 'partial';
+      await supabase.from('orders').update({ total_paid: newPaid, payment_status: newStatus }).eq('id', payment.orders.id);
+
+      if (payment.orders.is_credit_order) {
+        const newCreditUsed = Math.max(0, (payment.customer_stores.credit_used || 0) - payment.amount);
+        await supabase.from('customer_stores').update({ credit_used: newCreditUsed }).eq('id', payment.orders.store_id);
+        await supabase.from('credit_ledger').insert({
+          store_id: payment.orders.store_id, type: 'payment',
+          debit: 0, credit: payment.amount, balance_after: newCreditUsed,
+          reference_id: payment.id, reference_type: 'payment',
+          notes: `Pembayaran order ${payment.orders.order_number}`,
         });
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('payments')
-        .getPublicUrl(fileName);
-
-      // Create payment record
-      const { data: payment, error } = await supabase
-        .from('payments')
-        .insert([{
-          id: uuidv4(),
-          order_id,
-          supplier_id: req.user.userId,
-          amount: parseFloat(amount),
-          payment_method,
-          proof_url: publicUrl,
-          status: 'pending',
-          notes,
-          created_at: new Date().toISOString()
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      res.status(201).json({ payment });
-    } catch (error) {
-      console.error('Create payment error:', error);
-      res.status(500).json({ error: 'Failed to create payment' });
-    }
-  }
-);
-
-// Approve/Reject payment (Admin)
-app.patch('/api/payments/:id/status',
-  authenticateToken,
-  requireRole(['admin', 'staff']),
-  async (req, res) => {
-    try {
-      const { status, notes } = req.body;
-
-      if (!['approved', 'rejected'].includes(status)) {
-        return res.status(400).json({ error: 'Invalid status' });
       }
 
-      const { data: payment, error } = await supabase
-        .from('payments')
-        .update({
-          status,
-          notes: notes || null,
-          approved_by: req.user.userId,
-          approved_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', req.params.id)
-        .select()
-        .single();
+      await createNotification(payment.customer_stores.users.id, 'payment_verified',
+        '✅ Pembayaran Dikonfirmasi',
+        `Rp ${payment.amount.toLocaleString('id-ID')} untuk order ${payment.orders.order_number}`,
+        { order_id: payment.orders.id });
 
-      if (error) throw error;
-
-      // If approved, update order payment status
-      if (status === 'approved') {
-        await supabase
-          .from('orders')
-          .update({ 
-            payment_status: 'paid',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', payment.order_id);
+      if (payment.customer_stores.whatsapp) {
+        await sendWhatsApp(payment.customer_stores.whatsapp,
+          `✅ *Pembayaran Dikonfirmasi*\n\nHalo ${payment.customer_stores.owner_name}!\nPembayaran *Rp ${payment.amount.toLocaleString('id-ID')}* untuk order *${payment.orders.order_number}* telah dikonfirmasi.`,
+          payment.orders.store_id
+        );
       }
-
-      res.json({ payment });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to update payment status' });
+    } else {
+      await supabase.from('payments').update({ status: 'rejected', rejection_reason }).eq('id', req.params.id);
+      await createNotification(payment.customer_stores.users.id, 'payment_rejected',
+        '❌ Bukti Bayar Ditolak', `Alasan: ${rejection_reason}`, { order_id: payment.orders.id });
     }
+
+    res.json({ message: action === 'verify' ? 'Pembayaran dikonfirmasi' : 'Pembayaran ditolak' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
-);
+});
 
-// ==================== DASHBOARD & ANALYTICS ====================
+// ════════════════════════════════════════════════════════════════
+// DASHBOARD & ANALYTICS
+// ════════════════════════════════════════════════════════════════
 
-// Get dashboard stats
-app.get('/api/dashboard/stats', authenticateToken, requireRole(['admin', 'staff']), async (req, res) => {
+app.get('/api/dashboard/stats', auth, requireRole(['admin','staff']), async (req, res) => {
   try {
     const today = new Date();
     const todayStart = startOfDay(today).toISOString();
@@ -1192,79 +1160,51 @@ app.get('/api/dashboard/stats', authenticateToken, requireRole(['admin', 'staff'
     const monthStart = startOfMonth(today).toISOString();
     const monthEnd = endOfMonth(today).toISOString();
 
-    // Today's sales
-    const { data: todayOrders } = await supabase
-      .from('orders')
-      .select('total')
-      .eq('status', 'completed')
-      .gte('created_at', todayStart)
-      .lte('created_at', todayEnd);
+    const [todayOrders, monthOrders, pendingCount, storesData, productsData, creditData] = await Promise.all([
+      supabase.from('orders').select('total').eq('status', 'completed').gte('created_at', todayStart).lte('created_at', todayEnd),
+      supabase.from('orders').select('total').eq('status', 'completed').gte('created_at', monthStart).lte('created_at', monthEnd),
+      supabase.from('orders').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabase.from('customer_stores').select('status, tier'),
+      supabase.from('products').select('stock_karton, reorder_level').eq('is_active', true),
+      supabase.from('v_credit_outstanding').select('total_outstanding'),
+    ]);
 
-    const todaySales = todayOrders?.reduce((sum, o) => sum + o.total, 0) || 0;
-
-    // Monthly sales
-    const { data: monthOrders } = await supabase
-      .from('orders')
-      .select('total')
-      .eq('status', 'completed')
-      .gte('created_at', monthStart)
-      .lte('created_at', monthEnd);
-
-    const monthSales = monthOrders?.reduce((sum, o) => sum + o.total, 0) || 0;
-
-    // Total orders today
-    const { count: todayOrderCount } = await supabase
-      .from('orders')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', todayStart)
-      .lte('created_at', todayEnd);
-
-    // Pending orders
-    const { count: pendingOrders } = await supabase
-      .from('orders')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending');
-
-    // Low stock products
-    const { data: lowStockProducts } = await supabase
-      .from('products')
-      .select('id')
-      .eq('is_active', true)
-      .lte('stock_quantity', 'reorder_level');
-
-    // Total suppliers
-    const { count: totalSuppliers } = await supabase
-      .from('users')
-      .select('*', { count: 'exact', head: true })
-      .eq('role', 'supplier')
-      .eq('status', 'active');
-
-    // Total products
-    const { count: totalProducts } = await supabase
-      .from('products')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true);
+    const todaySales = todayOrders.data?.reduce((s, o) => s + o.total, 0) || 0;
+    const monthSales = monthOrders.data?.reduce((s, o) => s + o.total, 0) || 0;
+    const lowStockCount = productsData.data?.filter(p => p.stock_karton <= p.reorder_level).length || 0;
+    const totalOutstanding = creditData.data?.reduce((s, r) => s + (r.total_outstanding || 0), 0) || 0;
 
     res.json({
+      // Legacy fields (for existing dashboard page)
       todaySales,
       monthSales,
-      todayOrders: todayOrderCount,
-      pendingOrders,
-      lowStockCount: lowStockProducts?.length || 0,
-      totalSuppliers,
-      totalProducts
+      todayOrders: pendingCount.count || 0,
+      pendingOrders: pendingCount.count || 0,
+      lowStockCount,
+      totalSuppliers: storesData.data?.filter(s => s.status === 'approved').length || 0,
+      totalProducts: productsData.data?.length || 0,
+      // New fields
+      today_revenue: todaySales,
+      pending_stores: storesData.data?.filter(s => s.status === 'pending_review').length || 0,
+      approved_stores: storesData.data?.filter(s => s.status === 'approved').length || 0,
+      low_stock: lowStockCount,
+      total_outstanding_credit: totalOutstanding,
+      store_tiers: {
+        bronze: storesData.data?.filter(s => s.tier === 'bronze').length || 0,
+        silver: storesData.data?.filter(s => s.tier === 'silver').length || 0,
+        gold: storesData.data?.filter(s => s.tier === 'gold').length || 0,
+        platinum: storesData.data?.filter(s => s.tier === 'platinum').length || 0,
+      },
     });
-  } catch (error) {
-    console.error('Dashboard stats error:', error);
-    res.status(500).json({ error: 'Failed to get dashboard stats' });
+  } catch (e) {
+    console.error('Dashboard stats error:', e);
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Get sales chart data
-app.get('/api/dashboard/chart', authenticateToken, requireRole(['admin', 'staff']), async (req, res) => {
-  const { period = '7d' } = req.query;
-
+app.get('/api/dashboard/chart', auth, requireRole(['admin','staff']), async (req, res) => {
   try {
+    const { period = '7d' } = req.query;
     const days = period === '30d' ? 30 : 7;
     const data = [];
 
@@ -1272,164 +1212,225 @@ app.get('/api/dashboard/chart', authenticateToken, requireRole(['admin', 'staff'
       const date = subDays(new Date(), i);
       const start = startOfDay(date).toISOString();
       const end = endOfDay(date).toISOString();
-
       const { data: orders } = await supabase
-        .from('orders')
-        .select('total')
+        .from('orders').select('total')
         .eq('status', 'completed')
-        .gte('created_at', start)
-        .lte('created_at', end);
-
-      const sales = orders?.reduce((sum, o) => sum + o.total, 0) || 0;
-
-      data.push({
-        date: format(date, 'MMM dd'),
-        sales
-      });
+        .gte('created_at', start).lte('created_at', end);
+      data.push({ date: format(date, 'MMM dd'), sales: orders?.reduce((s, o) => s + o.total, 0) || 0 });
     }
 
     res.json({ data });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to get chart data' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Get top products
-app.get('/api/dashboard/top-products', authenticateToken, requireRole(['admin', 'staff']), async (req, res) => {
+app.get('/api/dashboard/top-products', auth, requireRole(['admin','staff']), async (req, res) => {
   try {
-    const { data: topProducts, error } = await supabase
+    const { data, error } = await supabase
       .from('order_items')
-      .select('product_name, quantity, products(image_url)')
-      .order('quantity', { ascending: false })
-      .limit(5);
-
+      .select('product_name, qty_karton, product_id, products(image_url, sku)')
+      .order('qty_karton', { ascending: false })
+      .limit(10);
     if (error) throw error;
 
-    res.json({ products: topProducts });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to get top products' });
+    // Aggregate by product
+    const map = new Map();
+    for (const item of data || []) {
+      const key = item.product_id;
+      if (!map.has(key)) map.set(key, { ...item, qty_karton: 0 });
+      map.get(key).qty_karton += item.qty_karton;
+    }
+    const products = [...map.values()].sort((a, b) => b.qty_karton - a.qty_karton).slice(0, 5);
+
+    res.json({ products });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-// ==================== REPORTS ====================
-
-// Sales report
-app.get('/api/reports/sales', authenticateToken, requireRole(['admin', 'staff']), async (req, res) => {
-  const { start_date, end_date } = req.query;
-
+app.get('/api/dashboard/recent', auth, requireRole(['admin','staff']), async (req, res) => {
   try {
-    let query = supabase
-      .from('orders')
-      .select('*, users(name, company_name), order_items(*)')
-      .eq('status', 'completed')
+    const [stores, orders, payments] = await Promise.all([
+      supabase.from('customer_stores').select('id,store_name,status,created_at').eq('status', 'pending_review').order('created_at', { ascending: false }).limit(5),
+      supabase.from('v_orders_summary').select('id,order_number,store_name,total,status').order('created_at', { ascending: false }).limit(5),
+      supabase.from('payments').select('id,amount,status,created_at,customer_stores(store_name)').eq('status', 'pending').order('created_at', { ascending: false }).limit(5),
+    ]);
+    res.json({ new_stores: stores.data, new_orders: orders.data, pending_payments: payments.data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════
+// REPORTS
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/reports/sales', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    let q = supabase.from('orders')
+      .select('*, customer_stores(store_name, owner_name), order_items(*)')
+      .neq('status', 'cancelled')
       .order('created_at', { ascending: false });
+    if (start_date) q = q.gte('created_at', start_date);
+    if (end_date) q = q.lte('created_at', end_date);
 
-    if (start_date) {
-      query = query.gte('created_at', start_date);
-    }
-    if (end_date) {
-      query = query.lte('created_at', end_date);
-    }
-
-    const { data: orders, error } = await query;
-
+    const { data: orders, error } = await q;
     if (error) throw error;
 
     const summary = {
-      totalSales: orders?.reduce((sum, o) => sum + o.total, 0) || 0,
+      totalSales: orders?.reduce((s, o) => s + o.total, 0) || 0,
       totalOrders: orders?.length || 0,
-      averageOrder: orders?.length ? orders.reduce((sum, o) => sum + o.total, 0) / orders.length : 0
+      averageOrder: orders?.length ? (orders.reduce((s, o) => s + o.total, 0) / orders.length) : 0,
+      completedOrders: orders?.filter(o => o.status === 'completed').length || 0,
     };
 
     res.json({ orders: orders || [], summary });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to generate sales report' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Inventory report
-app.get('/api/reports/inventory', authenticateToken, requireRole(['admin', 'staff']), async (req, res) => {
+app.get('/api/reports/inventory', auth, requireRole(['admin','staff']), async (req, res) => {
   try {
     const { data: products, error } = await supabase
       .from('products')
       .select('*, categories(name)')
       .eq('is_active', true)
-      .order('stock_quantity', { ascending: true });
-
+      .order('stock_karton', { ascending: true });
     if (error) throw error;
 
     const summary = {
       totalProducts: products?.length || 0,
-      lowStock: products?.filter(p => p.stock_quantity <= p.reorder_level).length || 0,
-      outOfStock: products?.filter(p => p.stock_quantity === 0).length || 0,
-      totalValue: products?.reduce((sum, p) => sum + (p.stock_quantity * p.price), 0) || 0
+      lowStock: products?.filter(p => p.stock_karton <= p.reorder_level && p.stock_karton > 0).length || 0,
+      outOfStock: products?.filter(p => p.stock_karton === 0).length || 0,
+      totalValueKarton: products?.reduce((s, p) => s + p.stock_karton, 0) || 0,
     };
 
     res.json({ products: products || [], summary });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to generate inventory report' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-// ==================== NOTIFICATIONS ====================
+// ════════════════════════════════════════════════════════════════
+// NOTIFICATIONS
+// ════════════════════════════════════════════════════════════════
 
-// Get notifications
-app.get('/api/notifications', authenticateToken, async (req, res) => {
+app.get('/api/notifications', auth, async (req, res) => {
   try {
-    let query = supabase
-      .from('notifications')
-      .select('*')
-      .eq('is_read', false)
+    const { data, error } = await supabase
+      .from('notifications').select('*')
+      .eq('user_id', req.user.id)
       .order('created_at', { ascending: false })
-      .limit(20);
-
-    if (req.user.role === 'supplier') {
-      query = query.eq('user_id', req.user.userId);
-    }
-
-    const { data: notifications, error } = await query;
-
+      .limit(50);
     if (error) throw error;
-
-    res.json({ notifications: notifications || [] });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to get notifications' });
+    res.json({ notifications: data, unread: data?.filter(n => !n.is_read).length || 0 });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Mark notification as read
-app.patch('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+app.patch('/api/notifications/:id/read', auth, async (req, res) => {
+  await supabase.from('notifications').update({ is_read: true }).eq('id', req.params.id).eq('user_id', req.user.id);
+  res.json({ success: true });
+});
+
+app.patch('/api/notifications/read-all', auth, async (req, res) => {
+  await supabase.from('notifications').update({ is_read: true }).eq('user_id', req.user.id);
+  res.json({ success: true });
+});
+
+// ════════════════════════════════════════════════════════════════
+// PROMOS
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/promos', auth, async (req, res) => {
+  const { data } = await supabase.from('promos').select('*').eq('is_active', true).gte('valid_until', new Date().toISOString());
+  res.json({ promos: data });
+});
+
+app.post('/api/promos', auth, requireRole(['admin']), async (req, res) => {
+  const { data, error } = await supabase.from('promos').insert({ ...req.body, created_by: req.user.id }).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json({ promo: data });
+});
+
+app.post('/api/promos/validate', auth, async (req, res) => {
+  const { code, order_value } = req.body;
+  const { data: promo } = await supabase.from('promos').select('*').eq('code', code).eq('is_active', true).single();
+  if (!promo) return res.status(404).json({ error: 'Kode promo tidak valid' });
+  if (new Date(promo.valid_until) < new Date()) return res.status(400).json({ error: 'Promo sudah expired' });
+  if (promo.min_order_value && order_value < promo.min_order_value)
+    return res.status(400).json({ error: `Minimum order Rp ${promo.min_order_value.toLocaleString('id-ID')}` });
+  res.json({ promo, valid: true });
+});
+
+// ════════════════════════════════════════════════════════════════
+// CREDIT
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/credit/ledger', auth, async (req, res) => {
   try {
-    const { error } = await supabase
-      .from('notifications')
-      .update({ is_read: true, updated_at: new Date().toISOString() })
-      .eq('id', req.params.id);
-
-    if (error) throw error;
-
-    res.json({ message: 'Notification marked as read' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update notification' });
+    let storeId = req.query.store_id;
+    if (req.user.role === 'customer') {
+      const { data: s } = await supabase.from('customer_stores').select('id').eq('user_id', req.user.id).single();
+      storeId = s?.id;
+    }
+    const { data } = await supabase.from('credit_ledger').select('*').eq('store_id', storeId).order('created_at', { ascending: false });
+    res.json({ ledger: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-// ==================== ERROR HANDLING ====================
-
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+app.get('/api/credit/outstanding', auth, requireRole(['admin','staff']), async (req, res) => {
+  const { data } = await supabase.from('v_credit_outstanding').select('*').order('total_outstanding', { ascending: false });
+  res.json({ outstanding: data });
 });
 
-// Error handler
+// ════════════════════════════════════════════════════════════════
+// SAVED CARTS
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/saved-carts', auth, role('customer'), async (req, res) => {
+  const { data: store } = await supabase.from('customer_stores').select('id').eq('user_id', req.user.id).single();
+  const { data } = await supabase.from('saved_carts').select('*').eq('store_id', store.id);
+  res.json({ saved_carts: data });
+});
+
+app.post('/api/saved-carts', auth, role('customer'), async (req, res) => {
+  const { data: store } = await supabase.from('customer_stores').select('id').eq('user_id', req.user.id).single();
+  const { data } = await supabase.from('saved_carts').insert({ store_id: store.id, ...req.body }).select().single();
+  res.status(201).json({ saved_cart: data });
+});
+
+// ════════════════════════════════════════════════════════════════
+// SETTINGS
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/settings', auth, requireRole(['admin']), async (req, res) => {
+  const { data } = await supabase.from('settings').select('*');
+  res.json({ settings: Object.fromEntries((data || []).map(s => [s.key, s.value])) });
+});
+
+app.patch('/api/settings/:key', auth, requireRole(['admin']), async (req, res) => {
+  const { data } = await supabase.from('settings')
+    .upsert({ key: req.params.key, value: req.body.value, updated_by: req.user.id }, { onConflict: 'key' })
+    .select().single();
+  res.json({ setting: data });
+});
+
+// ════════════════════════════════════════════════════════════════
+// ERROR HANDLER
+// ════════════════════════════════════════════════════════════════
+
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(500).json({ error: err.message || 'Internal server error' });
+  console.error('Unhandled error:', err.stack);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
-// Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`✅ SnackHub B2B API running on port ${PORT}`);
 });
-
-export default app;
