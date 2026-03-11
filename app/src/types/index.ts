@@ -36,6 +36,15 @@ export interface Category {
   created_at?: string;
 }
 
+export interface PriceTier {
+  tier: 'bronze' | 'silver' | 'gold' | 'platinum';
+  price_per_karton: number;
+  price_per_pack?: number;
+  price_per_pcs?: number;
+  min_karton?: number;
+  is_active?: boolean;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -43,6 +52,7 @@ export interface Product {
   description?: string;
   category_id?: string;
   category?: Category;
+  // Legacy fields (kompatibilitas)
   price: number;
   wholesale_price: number;
   wholesale_price_tier2?: number;
@@ -50,6 +60,16 @@ export interface Product {
   reorder_level: number;
   unit: string;
   weight?: number;
+  // New B2B fields
+  stock_karton?: number;
+  stock_pack?: number;
+  pcs_per_pack?: number;
+  pack_per_karton?: number;
+  unit_type?: string;
+  weight_gram?: number;
+  weight_karton_gram?: number;
+  price_tiers?: PriceTier[];
+  price_hidden?: boolean;
   image_url?: string;
   is_active: boolean;
   created_at?: string;
