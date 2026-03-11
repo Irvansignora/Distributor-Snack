@@ -29,7 +29,7 @@ import { cn } from '@/lib/utils';
 import type { OrderStatus } from '@/types';
 
 const statusOptions: { value: OrderStatus | 'all'; label: string; icon: React.ElementType }[] = [
-  { value: 'all', label: 'All Status', icon: Filter },
+  { value: 'all', label: 'Semua Status', icon: Filter },
   { value: 'pending', label: 'Pending', icon: ClipboardList },
   { value: 'approved', label: 'Approved', icon: CheckCircle },
   { value: 'packed', label: 'Packed', icon: Package },
@@ -53,9 +53,10 @@ export default function Orders() {
   });
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('id-ID', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
     }).format(value);
   };
 
@@ -85,7 +86,7 @@ export default function Orders() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
           <p className="text-muted-foreground">
-            Manage and track all orders from your suppliers
+            Kelola dan pantau semua pesanan
           </p>
         </div>
         <Button variant="outline">
@@ -101,7 +102,7 @@ export default function Orders() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search orders..."
+                placeholder="Cari pesanan..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10"
@@ -109,7 +110,7 @@ export default function Orders() {
             </div>
             <Select value={status} onValueChange={(v) => setStatus(v as OrderStatus | 'all')}>
               <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by status" />
+                <SelectValue placeholder="Filter status" />
               </SelectTrigger>
               <SelectContent>
                 {statusOptions.map((option) => (
