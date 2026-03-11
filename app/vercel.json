@@ -5,7 +5,7 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/((?!assets|sw.js|manifest.json|icon-).*)",
+      "source": "/((?!assets/|sw\\.js|manifest\\.json|icon-|favicon|robots\\.txt|.*\\.png|.*\\.ico|.*\\.svg|.*\\.webp|.*\\.css|.*\\.js).*)",
       "destination": "/index.html"
     }
   ]
