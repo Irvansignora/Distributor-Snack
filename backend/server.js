@@ -158,7 +158,10 @@ app.post('/api/auth/register',
         .insert({ email, password: hashedPassword, name, phone, role: 'customer' })
         .select()
         .single();
-      if (error) throw error;
+      if (error) {
+        console.error('Register insert error:', JSON.stringify(error));
+        throw new Error(error.message || 'Gagal membuat akun');
+      }
 
       // Auto-create empty store profile
       await supabase.from('customer_stores').insert({
@@ -189,13 +192,19 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const { data: user } = await supabase
+    const { data: user, error: userError } = await supabase
       .from('users').select('*').eq('email', email).single();
+
+    if (userError) {
+      console.error('Login DB error:', JSON.stringify(userError));
+      return res.status(500).json({ error: 'DB error: ' + userError.message });
+    }
 
     if (!user || !(await bcrypt.compare(password, user.password)))
       return res.status(401).json({ error: 'Email atau password salah' });
 
-    if (!user.is_active) return res.status(403).json({ error: 'Akun dinonaktifkan' });
+    // is_active null/undefined = aktif (baru register)
+    if (user.is_active === false) return res.status(403).json({ error: 'Akun dinonaktifkan' });
 
     await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
 
@@ -1445,3 +1454,4 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`✅ SnackHub B2B API running on port ${PORT}`);
 });
+
