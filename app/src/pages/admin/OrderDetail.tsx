@@ -18,9 +18,10 @@ import type { OrderStatus } from '@/types';
 
 const statusOptions: { value: OrderStatus; label: string; icon: React.ElementType }[] = [
   { value: 'pending', label: 'Pending', icon: Clock },
-  { value: 'approved', label: 'Approved', icon: CheckCircle },
-  { value: 'packed', label: 'Packed', icon: Package },
+  { value: 'confirmed', label: 'Confirmed', icon: CheckCircle },
+  { value: 'packing', label: 'Packing', icon: Package },
   { value: 'shipped', label: 'Shipped', icon: Truck },
+  { value: 'delivered', label: 'Delivered', icon: Package },
   { value: 'completed', label: 'Completed', icon: CheckCircle },
   { value: 'cancelled', label: 'Cancelled', icon: XCircle },
 ];
