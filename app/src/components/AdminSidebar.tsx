@@ -21,14 +21,14 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 const navItems = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/admin/products', label: 'Products', icon: Package },
-  { path: '/admin/categories', label: 'Categories', icon: Tags },
-  { path: '/admin/inventory', label: 'Inventory', icon: Warehouse },
-  { path: '/admin/orders', label: 'Orders', icon: ClipboardList },
-  { path: '/admin/suppliers', label: 'Suppliers', icon: Users },
-  { path: '/admin/payments', label: 'Payments', icon: CreditCard },
-  { path: '/admin/reports', label: 'Reports', icon: BarChart3 },
-  { path: '/admin/settings', label: 'Settings', icon: Settings },
+  { path: '/admin/products', label: 'Produk', icon: Package },
+  { path: '/admin/categories', label: 'Kategori', icon: Tags },
+  { path: '/admin/inventory', label: 'Stok', icon: Warehouse },
+  { path: '/admin/orders', label: 'Pesanan', icon: ClipboardList },
+  { path: '/admin/stores', label: 'Pelanggan', icon: Users },
+  { path: '/admin/payments', label: 'Pembayaran', icon: CreditCard },
+  { path: '/admin/reports', label: 'Laporan', icon: BarChart3 },
+  { path: '/admin/settings', label: 'Pengaturan', icon: Settings },
 ];
 
 export function AdminSidebar() {
@@ -49,7 +49,7 @@ export function AdminSidebar() {
             <Package className="h-5 w-5 text-primary-foreground" />
           </div>
           {!collapsed && (
-            <span className="font-bold text-lg">SnackTrack</span>
+            <span className="font-bold text-lg">SnackHub</span>
           )}
         </NavLink>
       </div>
