@@ -23,7 +23,6 @@ import {
   Filter
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import type { Product } from '@/types';
 
 export default function Catalog() {
