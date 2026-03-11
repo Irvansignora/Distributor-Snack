@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 // Tabs component not used currently
-import { ArrowLeft, Building2, Mail, Phone, MapPin, Package, DollarSign } from 'lucide-react';
+import { ArrowLeft, Building2, Mail, Phone, MapPin, Package, Banknote } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function SupplierDetail() {
@@ -19,9 +19,10 @@ export default function SupplierDetail() {
   });
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('id-ID', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
     }).format(value);
   };
 
@@ -128,7 +129,7 @@ export default function SupplierDetail() {
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                  <Banknote className="h-4 w-4 text-muted-foreground" />
                   <span>Total Spent</span>
                 </div>
                 <span className="font-bold">{formatCurrency(data?.stats.totalSpent || 0)}</span>
