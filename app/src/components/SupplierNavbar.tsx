@@ -33,9 +33,9 @@ export function SupplierNavbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = [
-    { to: '/supplier/dashboard', label: 'Home' },
-    { to: '/supplier/catalog', label: 'Catalog' },
-    { to: '/supplier/orders', label: 'My Orders' },
+    { to: '/supplier/dashboard', label: 'Beranda' },
+    { to: '/supplier/catalog', label: 'Katalog Produk' },
+    { to: '/supplier/orders', label: 'Pesanan Saya' },
   ];
 
   return (
@@ -47,7 +47,10 @@ export function SupplierNavbar() {
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
               <Package className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-lg hidden sm:inline">SnackTrack</span>
+            <div className="hidden sm:block">
+              <span className="font-bold text-lg leading-none">SnackHub</span>
+              <p className="text-xs text-muted-foreground leading-none">Distributor Snack</p>
+            </div>
           </NavLink>
 
           {/* Desktop Navigation */}
@@ -116,24 +119,24 @@ export function SupplierNavbar() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuLabel>{user?.company_name || user?.name}</DropdownMenuLabel>
+                <DropdownMenuLabel>{user?.name || user?.company_name}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <NavLink to="/supplier/profile">
                     <User className="mr-2 h-4 w-4" />
-                    Profile
+                    Profil Saya
                   </NavLink>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <NavLink to="/supplier/invoices">
                     <Package className="mr-2 h-4 w-4" />
-                    Invoices
+                    Riwayat Invoice
                   </NavLink>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={logout} className="text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
-                  Logout
+                  Keluar
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
