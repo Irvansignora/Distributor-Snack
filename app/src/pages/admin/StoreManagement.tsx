@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { NavLink } from 'react-router-dom';
-import axios from 'axios';
+import api from '@/services/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,10 +13,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { Search, Store, CheckCircle, XCircle, Clock, Eye, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const API = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-const token = () => localStorage.getItem('token');
-const headers = () => ({ Authorization: `Bearer ${token()}` });
 
 const STATUS_CONFIG = {
   draft:          { label: 'Draft', color: 'bg-gray-100 text-gray-700', icon: Store },
@@ -44,17 +40,17 @@ export default function StoreManagement() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-stores', search, statusFilter],
-    queryFn: () => axios.get(`${API}/admin/stores`, { headers: headers(), params: { search: search || undefined, status: statusFilter !== 'all' ? statusFilter : undefined, limit: 50 } }).then(r => r.data),
+    queryFn: () => api.get('/admin/stores', { params: { search: search || undefined, status: statusFilter !== 'all' ? statusFilter : undefined, limit: 50 } }).then(r => r.data),
   });
 
   const approveMutation = useMutation({
-    mutationFn: ({ id, ...data }: any) => axios.patch(`${API}/admin/stores/${id}/approve`, data, { headers: headers() }),
+    mutationFn: ({ id, ...data }: any) => api.patch(`/admin/stores/${id}/approve`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-stores'] }); toast.success('Toko berhasil disetujui'); setApproveDialog(null); },
     onError: (e: any) => toast.error(e.response?.data?.error || 'Gagal menyetujui toko'),
   });
 
   const rejectMutation = useMutation({
-    mutationFn: ({ id, reason }: any) => axios.patch(`${API}/admin/stores/${id}/reject`, { reason }, { headers: headers() }),
+    mutationFn: ({ id, reason }: any) => api.patch(`/admin/stores/${id}/reject`, { reason }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-stores'] }); toast.success('Toko ditolak'); setRejectDialog(null); setRejectReason(''); },
     onError: (e: any) => toast.error(e.response?.data?.error || 'Gagal menolak toko'),
   });
