@@ -80,7 +80,7 @@ export default function ProductForm() {
       });
       if (p.price_tiers?.length) {
         setTiers(prev => prev.map(t => {
-          const found = p.price_tiers.find((pt: any) => pt.tier === t.tier);
+          const found = p.price_tiers?.find((pt: any) => pt.tier === t.tier);
           return found ? {
             ...t,
             price_per_karton: found.price_per_karton?.toString() || '',
