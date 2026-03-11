@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { 
   TrendingUp, 
   TrendingDown, 
-  DollarSign, 
+  Banknote, 
   ShoppingCart, 
   Package, 
   Users, 
@@ -98,9 +98,9 @@ export default function AdminDashboard() {
   });
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('id-ID', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'IDR',
       minimumFractionDigits: 0,
     }).format(value);
   };
@@ -129,7 +129,7 @@ export default function AdminDashboard() {
           title="Today's Sales"
           value={statsLoading ? '...' : formatCurrency(stats?.todaySales || 0)}
           description="Total revenue today"
-          icon={DollarSign}
+          icon={Banknote}
           trend="+12% from yesterday"
           trendUp={true}
         />
@@ -239,7 +239,7 @@ export default function AdminDashboard() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-primary/10">
-                  <DollarSign className="h-4 w-4 text-primary" />
+                  <Banknote className="h-4 w-4 text-primary" />
                 </div>
                 <div>
                   <p className="text-sm font-medium">Monthly Revenue</p>
