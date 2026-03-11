@@ -22,18 +22,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return [];
   });
 
-  // Persist cart to localStorage
-  const updateCart = useCallback((newItems: CartItem[]) => {
-    setItems(newItems);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('cart', JSON.stringify(newItems));
-    }
-  }, []);
-  
-  // Use updateCart to avoid unused variable warning
-  useState(() => {
-    updateCart;
-  });
+
 
   const addToCart = useCallback((product: Product, quantity: number) => {
     setItems((prev) => {
