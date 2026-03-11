@@ -20,9 +20,6 @@ export default function Checkout() {
   const [shippingAddress, setShippingAddress] = useState(user?.address || '');
   const notes = location.state?.notes || '';
 
-  const tax = total * 0.1;
-  const grandTotal = total + tax;
-
   const createOrderMutation = useMutation({
     mutationFn: orderService.createOrder,
     onSuccess: () => {
@@ -54,10 +51,11 @@ export default function Checkout() {
     createOrderMutation.mutate({
       items: items.map(item => ({
         product_id: item.product.id,
-        quantity: item.quantity,
+        qty_karton: item.quantity,
       })),
+      payment_method: 'bank_transfer',
       notes,
-      shipping_address: shippingAddress,
+      shipping_address: shippingAddress ? { address: shippingAddress } : undefined,
     });
   };
 
@@ -174,14 +172,14 @@ export default function Checkout() {
                   <span className="text-muted-foreground">Subtotal</span>
                   <span>{formatCurrency(total)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tax (10%)</span>
-                  <span>{formatCurrency(tax)}</span>
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>Ongkos kirim</span>
+                  <span>Dihitung saat checkout</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between font-bold text-lg">
-                  <span>Total</span>
-                  <span>{formatCurrency(grandTotal)}</span>
+                  <span>Estimasi Total</span>
+                  <span>{formatCurrency(total)}</span>
                 </div>
               </div>
 
