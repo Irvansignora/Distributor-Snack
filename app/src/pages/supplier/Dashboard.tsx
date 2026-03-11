@@ -28,7 +28,7 @@ export default function SupplierDashboard() {
     queryFn: () => paymentService.getPayments({ limit: 5 }),
   });
 
-  const pendingOrders = ordersData?.orders.filter(o => o.status === 'pending').length || 0;
+  const pendingOrders = ordersData?.orders.filter(o => o.status === 'menunggu').length || 0;
   const completedOrders = ordersData?.orders.filter(o => o.status === 'completed').length || 0;
   const totalSpent = ordersData?.orders
     .filter(o => o.status === 'completed')
@@ -45,9 +45,9 @@ export default function SupplierDashboard() {
     <div className="space-y-6 p-4 lg:p-8">
       {/* Welcome */}
       <div>
-        <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Welcome back!</h1>
+        <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Selamat Datang 👋</h1>
         <p className="text-muted-foreground">
-          Here's an overview of your account and recent activity.
+          Ini ringkasan belanja dan aktivitas akun kamu.
         </p>
       </div>
 
@@ -55,7 +55,7 @@ export default function SupplierDashboard() {
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Pesanan</CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -82,7 +82,7 @@ export default function SupplierDashboard() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Spent</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Belanja</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -96,33 +96,33 @@ export default function SupplierDashboard() {
         <Button asChild className="h-auto py-4 flex flex-col items-center gap-2">
           <NavLink to="/supplier/catalog">
             <ShoppingBag className="h-6 w-6" />
-            <span>Browse Catalog</span>
+            <span>Belanja Sekarang</span>
           </NavLink>
         </Button>
         <Button variant="outline" asChild className="h-auto py-4 flex flex-col items-center gap-2">
           <NavLink to="/supplier/orders">
             <Package className="h-6 w-6" />
-            <span>My Orders</span>
+            <span>Pesanan Saya</span>
           </NavLink>
         </Button>
         <Button variant="outline" asChild className="h-auto py-4 flex flex-col items-center gap-2">
           <NavLink to="/supplier/invoices">
             <CreditCard className="h-6 w-6" />
-            <span>Invoices</span>
+            <span>Invoice</span>
           </NavLink>
         </Button>
         <Button variant="outline" asChild className="h-auto py-4 flex flex-col items-center gap-2">
           <NavLink to="/supplier/profile">
             <TrendingUp className="h-6 w-6" />
-            <span>My Profile</span>
+            <span>Profil Saya</span>
           </NavLink>
         </Button>
       </div>
 
-      {/* Recent Orders */}
+      {/* Pesanan Terbaru */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Recent Orders</CardTitle>
+          <CardTitle>Pesanan Terbaru</CardTitle>
           <Button variant="ghost" size="sm" asChild>
             <NavLink to="/supplier/orders">
               View All
@@ -134,9 +134,9 @@ export default function SupplierDashboard() {
           {ordersData?.orders.length === 0 ? (
             <div className="text-center py-8">
               <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">No orders yet</p>
+              <p className="text-muted-foreground">Belum ada pesanan</p>
               <Button asChild className="mt-4">
-                <NavLink to="/supplier/catalog">Start Shopping</NavLink>
+                <NavLink to="/supplier/catalog">Mulai Belanja</NavLink>
               </Button>
             </div>
           ) : (
@@ -155,7 +155,7 @@ export default function SupplierDashboard() {
                   <div className="flex items-center gap-4">
                     <Badge variant={
                       order.status === 'completed' ? 'default' :
-                      order.status === 'pending' ? 'secondary' :
+                      order.status === 'menunggu' ? 'secondary' :
                       order.status === 'cancelled' ? 'destructive' :
                       'outline'
                     }>
