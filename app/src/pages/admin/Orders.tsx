@@ -31,8 +31,8 @@ import type { OrderStatus } from '@/types';
 const statusOptions: { value: OrderStatus | 'all'; label: string; icon: React.ElementType }[] = [
   { value: 'all', label: 'Semua Status', icon: Filter },
   { value: 'pending', label: 'Pending', icon: ClipboardList },
-  { value: 'approved', label: 'Approved', icon: CheckCircle },
-  { value: 'packed', label: 'Packed', icon: Package },
+  { value: 'confirmed', label: 'Confirmed', icon: CheckCircle },
+  { value: 'packing', label: 'Packing', icon: Package },
   { value: 'shipped', label: 'Shipped', icon: Truck },
   { value: 'completed', label: 'Completed', icon: CheckCircle },
   { value: 'cancelled', label: 'Cancelled', icon: XCircle },
@@ -66,9 +66,9 @@ export default function Orders() {
         return 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20';
       case 'pending':
         return 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20';
-      case 'approved':
+      case 'confirmed':
         return 'bg-blue-500/10 text-blue-500 hover:bg-blue-500/20';
-      case 'packed':
+      case 'packing':
         return 'bg-purple-500/10 text-purple-500 hover:bg-purple-500/20';
       case 'shipped':
         return 'bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20';
