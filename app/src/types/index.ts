@@ -93,7 +93,7 @@ export interface OrderItem {
   product?: Product;
 }
 
-export type OrderStatus = 'pending' | 'approved' | 'packed' | 'shipped' | 'completed' | 'cancelled';
+export type OrderStatus = 'pending' | 'confirmed' | 'packing' | 'shipped' | 'delivered' | 'completed' | 'cancelled';
 export type PaymentStatus = 'pending' | 'partial' | 'paid' | 'refunded';
 
 export interface Order {
@@ -130,7 +130,7 @@ export interface Payment {
   amount: number;
   payment_method: 'bank_transfer' | 'cash' | 'check' | 'credit' | 'other';
   proof_url?: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'verified' | 'rejected';
   notes?: string;
   approved_by?: string;
   approved_at?: string;
