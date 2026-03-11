@@ -28,7 +28,7 @@ export default function SupplierDashboard() {
     queryFn: () => paymentService.getPayments({ limit: 5 }),
   });
 
-  const pendingOrders = ordersData?.orders.filter(o => o.status === 'menunggu').length || 0;
+  const pendingOrders = ordersData?.orders.filter(o => o.status === 'pending').length || 0;
   const completedOrders = ordersData?.orders.filter(o => o.status === 'completed').length || 0;
   const totalSpent = ordersData?.orders
     .filter(o => o.status === 'completed')
@@ -155,7 +155,7 @@ export default function SupplierDashboard() {
                   <div className="flex items-center gap-4">
                     <Badge variant={
                       order.status === 'completed' ? 'default' :
-                      order.status === 'menunggu' ? 'secondary' :
+                      order.status === 'pending' ? 'secondary' :
                       order.status === 'cancelled' ? 'destructive' :
                       'outline'
                     }>
