@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,7 +38,6 @@ const GMV_OPTIONS = [
 
 export default function Onboarding() {
   const { store, refreshStore } = useAuth() as any;
-  const navigate = useNavigate();
   const [step, setStep] = useState(store?.ktp_photo_url ? 3 : store?.store_name ? 2 : 1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -83,7 +81,7 @@ export default function Onboarding() {
       if (files.store_photo) formData.append('store_photo', files.store_photo);
       if (files.selfie_ktp) formData.append('selfie_ktp', files.selfie_ktp);
       if (files.npwp_photo) formData.append('npwp_photo', files.npwp_photo);
-      await axios.post(`${API}/store/documents`, formData, { headers, headers: { ...headers, 'Content-Type': 'multipart/form-data' } });
+      await axios.post(`${API}/store/documents`, formData, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } });
       setStep(3);
     } catch (e: any) {
       setError(e.response?.data?.error || 'Gagal upload dokumen');
