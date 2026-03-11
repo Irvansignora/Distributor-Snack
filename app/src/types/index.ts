@@ -2,7 +2,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'staff' | 'supplier';
+  role: 'admin' | 'staff' | 'supplier' | 'customer';
   company_name?: string;
   phone?: string;
   address?: string;
@@ -21,7 +21,7 @@ export interface RegisterData {
   email: string;
   password: string;
   name: string;
-  role: 'supplier';
+  role: 'supplier' | 'customer';
   company_name?: string;
   phone?: string;
   address?: string;
