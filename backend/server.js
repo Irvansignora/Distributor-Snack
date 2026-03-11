@@ -13,9 +13,9 @@ dotenv.config();
 
 // Cloudinary config (untuk foto produk)
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dyhvx9wit',
-  api_key:    process.env.CLOUDINARY_API_KEY    || '481755884898814',
-  api_secret: process.env.CLOUDINARY_API_SECRET || 'isTbcJBFnyCVr-3mdqSCWMUtDRQ',
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -212,9 +212,10 @@ app.post('/api/auth/login', async (req, res) => {
 
     await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
 
+    if (!JWT_SECRET) throw new Error('JWT_SECRET env variable is not set');
     const token = jwt.sign(
       { id: user.id, userId: user.id, email: user.email, role: user.role },
-      JWT_SECRET || 'snackhub-fallback-secret', { expiresIn: '7d' }
+      JWT_SECRET, { expiresIn: '7d' }
     );
 
     let store = null;
@@ -969,8 +970,6 @@ app.post('/api/orders', auth, role('customer'), async (req, res) => {
 
     // Decrement stock
     for (const item of orderItems) {
-      await supabase.from('products').update({ stock_karton: supabase.rpc ? undefined : 0 }).eq('id', item.product_id);
-      // Direct update
       const { data: p } = await supabase.from('products').select('stock_karton').eq('id', item.product_id).single();
       await supabase.from('products').update({ stock_karton: p.stock_karton - item.qty_karton }).eq('id', item.product_id);
 
@@ -1479,3 +1478,4 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`✅ SnackHub B2B API running on port ${PORT}`);
 });
+
