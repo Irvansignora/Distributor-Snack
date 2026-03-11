@@ -105,7 +105,7 @@ export default function Payments() {
                       <td className="py-3 px-4 capitalize">{payment.payment_method.replace('_', ' ')}</td>
                       <td className="py-3 px-4">
                         <Badge variant={
-                          payment.status === 'approved' ? 'default' :
+                          payment.status === 'verified' ? 'default' :
                           payment.status === 'rejected' ? 'destructive' :
                           'secondary'
                         }>
