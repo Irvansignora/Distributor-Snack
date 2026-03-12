@@ -21,14 +21,10 @@ export default function Payments() {
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notes, setNotes] = useState('');
-  // BUG-07 FIX: tambah state pagination
-  const [page, setPage] = useState(1);
-  const LIMIT = 10;
 
   const { data, refetch } = useQuery({
-    queryKey: ['payments', page],
-    // BUG-07 FIX: kirim page & limit ke API
-    queryFn: () => paymentService.getPayments({ page, limit: LIMIT }),
+    queryKey: ['payments'],
+    queryFn: () => paymentService.getPayments(),
   });
 
   const approveMutation = useMutation({
@@ -57,12 +53,12 @@ export default function Payments() {
     },
   });
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = (value: number | null | undefined) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
-    }).format(value);
+    }).format(value || 0);
   };
 
   return (
@@ -190,31 +186,6 @@ export default function Payments() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* BUG-07 FIX: pagination controls */}
-      {data?.pagination && data.pagination.totalPages > 1 && (
-        <div className="flex justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1}
-          >
-            Previous
-          </Button>
-          <span className="flex items-center px-4 text-sm text-muted-foreground">
-            Page {page} of {data.pagination.totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(p => Math.min(data.pagination.totalPages, p + 1))}
-            disabled={page === data.pagination.totalPages}
-          >
-            Next
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
