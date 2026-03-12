@@ -45,12 +45,12 @@ export default function SupplierOrderDetail() {
     enabled: !!id,
   });
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = (value: number | null | undefined) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
-    }).format(value);
+    }).format(value || 0);
   };
 
   if (isLoading) {
@@ -150,16 +150,16 @@ export default function SupplierOrderDetail() {
             <CardContent className="space-y-4">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Subtotal</span>
-                <span>{formatCurrency(order.subtotal)}</span>
+                <span>{formatCurrency(order.subtotal || 0)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Tax</span>
-                <span>{formatCurrency(order.tax)}</span>
+                <span>{formatCurrency((order.tax || 0))}</span>
               </div>
               <Separator />
               <div className="flex justify-between font-bold text-lg">
                 <span>Total</span>
-                <span>{formatCurrency(order.total)}</span>
+                <span>{formatCurrency(order.total || 0)}</span>
               </div>
             </CardContent>
           </Card>
