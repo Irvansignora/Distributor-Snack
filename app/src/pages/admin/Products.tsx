@@ -1,21 +1,11 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { NavLink } from 'react-router-dom';
 import { productService } from '@/services/products';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,23 +21,17 @@ import {
   Package,
   AlertTriangle,
   Filter,
-  Download,
-  Loader2,
+  Download
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
 import type { Product } from '@/types';
 
 export default function Products() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [showLowStock, setShowLowStock] = useState(false);
-  // BUG-03 FIX: state untuk AlertDialog konfirmasi hapus
-  const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const queryClient = useQueryClient();
-
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['products', search, page, showLowStock],
     queryFn: () => productService.getProducts({
       search: search || undefined,
@@ -57,26 +41,23 @@ export default function Products() {
     }),
   });
 
-  // BUG-03 FIX: useMutation dengan loading state + toast + invalidateQueries
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => productService.deleteProduct(id),
-    onSuccess: () => {
-      toast.success('Produk berhasil dihapus');
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      setDeleteId(null);
-    },
-    onError: () => {
-      toast.error('Gagal menghapus produk');
-      setDeleteId(null);
-    },
-  });
+  const handleDelete = async (id: string) => {
+    if (confirm('Are you sure you want to delete this product?')) {
+      try {
+        await productService.deleteProduct(id);
+        refetch();
+      } catch (error) {
+        alert('Failed to delete product');
+      }
+    }
+  };
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = (value: number | null | undefined) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
-    }).format(value);
+    }).format(value || 0);
   };
 
   return (
@@ -168,14 +149,14 @@ export default function Products() {
               <ProductCard
                 key={product.id}
                 product={product}
-                onDelete={(id) => setDeleteId(id)}
+                onDelete={handleDelete}
                 formatCurrency={formatCurrency}
               />
             ))}
           </div>
 
           {/* Pagination */}
-          {data?.pagination && data.pagination.totalPages > 1 && (
+          {data?.pagination && data?.pagination?.totalPages > 1 && (
             <div className="flex justify-center gap-2">
               <Button
                 variant="outline"
@@ -185,12 +166,12 @@ export default function Products() {
                 Previous
               </Button>
               <span className="flex items-center px-4 text-sm text-muted-foreground">
-                Page {page} of {data.pagination.totalPages}
+                Page {page} of {data?.pagination?.totalPages}
               </span>
               <Button
                 variant="outline"
-                onClick={() => setPage(p => Math.min(data.pagination.totalPages, p + 1))}
-                disabled={page === data.pagination.totalPages}
+                onClick={() => setPage(p => Math.min(data?.pagination?.totalPages || 1, p + 1))}
+                disabled={page === data?.pagination?.totalPages}
               >
                 Next
               </Button>
@@ -198,30 +179,6 @@ export default function Products() {
           )}
         </>
       )}
-
-      {/* BUG-03 FIX: AlertDialog konfirmasi hapus - tidak pakai window.confirm() */}
-      <AlertDialog open={!!deleteId} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Hapus Produk?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tindakan ini tidak dapat dibatalkan. Produk akan dihapus secara permanen dari katalog.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>Batal</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteId && deleteMutation.mutate(deleteId)}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menghapus...</>
-              ) : 'Hapus'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
