@@ -61,7 +61,7 @@ export default function SupplierDetail() {
           <h1 className="text-3xl font-bold tracking-tight">
             {supplier.company_name || supplier.name}
           </h1>
-          <p className="text-muted-foreground">Supplier Details</p>
+          <p className="text-muted-foreground">Detail Pelanggan</p>
         </div>
       </div>
 
@@ -104,19 +104,19 @@ export default function SupplierDetail() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Credit Information</CardTitle>
+              <CardTitle>Informasi Kredit</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <p className="text-sm text-muted-foreground">Credit Limit</p>
+                <p className="text-sm text-muted-foreground">Limit Kredit</p>
                 <p className="text-2xl font-bold">{formatCurrency(supplier.credit_limit || 0)}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Current Credit Used</p>
+                <p className="text-sm text-muted-foreground">Kredit Terpakai</p>
                 <p className="text-2xl font-bold">{formatCurrency(supplier.current_credit || 0)}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Available Credit</p>
+                <p className="text-sm text-muted-foreground">Kredit Tersedia</p>
                 <p className="text-2xl font-bold text-emerald-500">
                   {formatCurrency((supplier.credit_limit || 0) - (supplier.current_credit || 0))}
                 </p>
@@ -126,27 +126,27 @@ export default function SupplierDetail() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Order Statistics</CardTitle>
+              <CardTitle>Statistik Pesanan</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Package className="h-4 w-4 text-muted-foreground" />
-                  <span>Total Orders</span>
+                  <span>Total Pesanan</span>
                 </div>
                 <span className="font-bold">{data?.stats.totalOrders || 0}</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Package className="h-4 w-4 text-emerald-500" />
-                  <span>Completed</span>
+                  <span>Selesai</span>
                 </div>
                 <span className="font-bold">{data?.stats.completedOrders || 0}</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Banknote className="h-4 w-4 text-muted-foreground" />
-                  <span>Total Spent</span>
+                  <span>Total Belanja</span>
                 </div>
                 <span className="font-bold">{formatCurrency(data?.stats.totalSpent || 0)}</span>
               </div>
@@ -157,15 +157,15 @@ export default function SupplierDetail() {
         <div className="lg:col-span-2">
           <Card>
             <CardHeader>
-              <CardTitle>Order History</CardTitle>
+              <CardTitle>Riwayat Pesanan</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b">
-                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Order ID</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Date</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">No. Pesanan</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Tanggal</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
                       <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Total</th>
                     </tr>
@@ -182,7 +182,7 @@ export default function SupplierDetail() {
                             #{order.order_number || order.id.slice(0, 8)}
                           </td>
                           <td className="py-3 px-4 text-muted-foreground">
-                            {order.created_at ? format(new Date(order.created_at), 'MMM dd, yyyy') : '-'}
+                            {order.created_at ? format(new Date(order.created_at), 'dd MMM yyyy') : '-'}
                           </td>
                           <td className="py-3 px-4">
                             <Badge variant={
