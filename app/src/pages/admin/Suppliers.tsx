@@ -55,10 +55,10 @@ export default function Suppliers() {
     },
   });
 
-  const filteredSuppliers = data?.suppliers.filter(s =>
-    s.name.toLowerCase().includes(search.toLowerCase()) ||
-    s.company_name?.toLowerCase().includes(search.toLowerCase()) ||
-    s.email.toLowerCase().includes(search.toLowerCase())
+  const filteredSuppliers = (data?.suppliers || []).filter(s =>
+    (s.name || '').toLowerCase().includes(search.toLowerCase()) ||
+    (s.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
+    (s.email || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const formatCurrency = (value: number) => {
