@@ -134,21 +134,21 @@ export default function SupplierDetail() {
                   <Package className="h-4 w-4 text-muted-foreground" />
                   <span>Total Pesanan</span>
                 </div>
-                <span className="font-bold">{data?.stats.totalOrders || 0}</span>
+                <span className="font-bold">{data?.stats?.totalOrders || 0}</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Package className="h-4 w-4 text-emerald-500" />
                   <span>Selesai</span>
                 </div>
-                <span className="font-bold">{data?.stats.completedOrders || 0}</span>
+                <span className="font-bold">{data?.stats?.completedOrders || 0}</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Banknote className="h-4 w-4 text-muted-foreground" />
                   <span>Total Belanja</span>
                 </div>
-                <span className="font-bold">{formatCurrency(data?.stats.totalSpent || 0)}</span>
+                <span className="font-bold">{formatCurrency(data?.stats?.totalSpent || 0)}</span>
               </div>
             </CardContent>
           </Card>
@@ -171,12 +171,12 @@ export default function SupplierDetail() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data?.orders.length === 0 ? (
+                    {data?.orders?.length === 0 ? (
                       <tr>
                         <td colSpan={4} className="py-8 text-center text-muted-foreground">No orders yet</td>
                       </tr>
                     ) : (
-                      data?.orders.map((order) => (
+                      data?.orders?.map((order) => (
                         <tr key={order.id} className="border-b hover:bg-muted/50">
                           <td className="py-3 px-4 font-medium">
                             #{order.order_number || order.id.slice(0, 8)}
