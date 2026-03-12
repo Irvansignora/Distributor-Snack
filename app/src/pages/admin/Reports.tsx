@@ -176,7 +176,7 @@ export default function Reports() {
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(salesData?.summary.totalSales || 0)}</div>
+                <div className="text-2xl font-bold">{formatCurrency(salesData?.summary?.totalSales || 0)}</div>
               </CardContent>
             </Card>
             <Card>
@@ -185,7 +185,7 @@ export default function Reports() {
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{salesData?.summary.totalOrders || 0}</div>
+                <div className="text-2xl font-bold">{salesData?.summary?.totalOrders || 0}</div>
               </CardContent>
             </Card>
             <Card>
@@ -194,7 +194,7 @@ export default function Reports() {
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(salesData?.summary.averageOrder || 0)}</div>
+                <div className="text-2xl font-bold">{formatCurrency(salesData?.summary?.averageOrder || 0)}</div>
               </CardContent>
             </Card>
           </div>
@@ -235,7 +235,7 @@ export default function Reports() {
                     </tr>
                   </thead>
                   <tbody>
-                    {salesData?.orders.slice(0, 10).map((order) => (
+                    {salesData?.orders?.slice(0, 10).map((order) => (
                       <tr key={order.id} className="border-b hover:bg-muted/50">
                         <td className="py-3 px-4">#{order.order_number || order.id.slice(0, 8)}</td>
                         <td className="py-3 px-4 text-muted-foreground">
@@ -280,7 +280,7 @@ export default function Reports() {
                 <Package className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{inventoryData?.summary.totalProducts || 0}</div>
+                <div className="text-2xl font-bold">{inventoryData?.summary?.totalProducts || 0}</div>
               </CardContent>
             </Card>
             <Card>
@@ -289,7 +289,7 @@ export default function Reports() {
                 <TrendingUp className="h-4 w-4 text-amber-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-amber-500">{inventoryData?.summary.lowStock || 0}</div>
+                <div className="text-2xl font-bold text-amber-500">{inventoryData?.summary?.lowStock || 0}</div>
               </CardContent>
             </Card>
             <Card>
@@ -298,7 +298,7 @@ export default function Reports() {
                 <Package className="h-4 w-4 text-destructive" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-destructive">{inventoryData?.summary.outOfStock || 0}</div>
+                <div className="text-2xl font-bold text-destructive">{inventoryData?.summary?.outOfStock || 0}</div>
               </CardContent>
             </Card>
             <Card>
@@ -307,7 +307,7 @@ export default function Reports() {
                 <TrendingUp className="h-4 w-4 text-emerald-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-emerald-500">{formatCurrency(inventoryData?.summary.totalValue || 0)}</div>
+                <div className="text-2xl font-bold text-emerald-500">{formatCurrency(inventoryData?.summary?.totalValue || 0)}</div>
               </CardContent>
             </Card>
           </div>
@@ -328,7 +328,7 @@ export default function Reports() {
                     </tr>
                   </thead>
                   <tbody>
-                    {inventoryData?.products.slice(0, 20).map((product) => (
+                    {inventoryData?.products?.slice(0, 20).map((product) => (
                       <tr key={product.id} className="border-b hover:bg-muted/50">
                         <td className="py-3 px-4 font-medium">{product.name}</td>
                         <td className="py-3 px-4 text-muted-foreground">{product.sku}</td>
