@@ -207,11 +207,18 @@ function ProductCard({
         <div className="mt-auto pt-3">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <p className="text-lg font-bold text-primary">{formatCurrency(product.wholesale_price || product.price)}</p>
-              {product.wholesale_price && product.wholesale_price < product.price && (
-                <p className="text-xs text-muted-foreground line-through">
-                  {formatCurrency(product.price)}
-                </p>
+              {product.price_hidden ? (
+                <p className="text-sm text-muted-foreground italic">Harga tersembunyi (akun belum terverifikasi)</p>
+              ) : (
+                <>
+                  {/* BUG-11 FIX: tampilkan harga sesuai tier dari backend */}
+                  <p className="text-lg font-bold text-primary">{formatCurrency(product.wholesale_price || product.price)}</p>
+                  {product.wholesale_price && product.wholesale_price < product.price && (
+                    <p className="text-xs text-muted-foreground line-through">
+                      {formatCurrency(product.price)}
+                    </p>
+                  )}
+                </>
               )}
             </div>
             {isOutOfStock && (
