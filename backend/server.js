@@ -606,7 +606,18 @@ app.get('/api/products', auth, async (req, res) => {
       };
     });
 
-    res.json({ products, total: count, page: Number(page), limit: Number(limit) });
+    res.json({ 
+      products, 
+      total: count,
+      page: Number(page), 
+      limit: Number(limit),
+      pagination: { 
+        page: Number(page), 
+        limit: Number(limit), 
+        total: count, 
+        totalPages: Math.ceil((count || 0) / Number(limit)) 
+      } 
+    });
   } catch (e) {
     console.error('Get products error:', e);
     res.status(500).json({ error: e.message });
