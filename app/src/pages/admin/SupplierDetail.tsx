@@ -27,12 +27,28 @@ export default function SupplierDetail() {
   };
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-muted-foreground text-sm">Memuat data supplier...</p>
+        </div>
+      </div>
+    );
   }
 
   const supplier = data?.supplier;
   if (!supplier) {
-    return <div>Supplier not found</div>;
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
+        <Building2 className="h-16 w-16 text-muted-foreground" />
+        <h2 className="text-xl font-semibold">Supplier tidak ditemukan</h2>
+        <Button onClick={() => navigate('/admin/suppliers')}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Kembali ke Daftar Supplier
+        </Button>
+      </div>
+    );
   }
 
   return (
