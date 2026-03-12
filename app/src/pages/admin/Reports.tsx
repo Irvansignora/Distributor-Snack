@@ -4,15 +4,45 @@ import { reportService } from '@/services/reports';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-// DatePicker component needs to be created or use a simple input
-// import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+// BUG-06 FIX: un-comment recharts imports
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Download, FileText, Package, TrendingUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
+import { toast } from 'sonner';
+import type { Order, Product } from '@/types';
 
-// Chart colors for future use
-const _COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6'];
-void _COLORS;
+// BUG-06 FIX: hapus _COLORS yang tidak dipakai, gunakan langsung
+const CHART_COLOR = '#6366f1';
+
+// BUG-06 FIX: fungsi export CSV
+function exportToCSV(data: any[], filename: string) {
+  if (!data || data.length === 0) {
+    toast.error('Tidak ada data untuk diekspor');
+    return;
+  }
+  const headers = Object.keys(data[0]);
+  const csvRows = [
+    headers.join(','),
+    ...data.map(row =>
+      headers.map(h => {
+        const val = row[h] ?? '';
+        return typeof val === 'string' && val.includes(',') ? `"${val}"` : val;
+      }).join(',')
+    ),
+  ];
+  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${filename}_${format(new Date(), 'yyyyMMdd')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast.success(`${filename}.csv berhasil diunduh`);
+}
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 
 export default function Reports() {
   const [startDate, setStartDate] = useState<Date>();
@@ -31,26 +61,58 @@ export default function Reports() {
     queryFn: reportService.getInventoryReport,
   });
 
-  const formatCurrency = (value: number | null | undefined) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(value || 0);
+  // BUG-06 FIX: fungsi Export All — export kedua laporan sekaligus
+  const handleExportAll = () => {
+    if (salesData?.orders) {
+      exportToCSV(
+        salesData.orders.map((o: Order) => ({
+          order_number: o.order_number || o.id.slice(0, 8),
+          tanggal: o.created_at ? format(new Date(o.created_at), 'yyyy-MM-dd') : '-',
+          status: o.status,
+          payment_status: o.payment_status,
+          total: o.total,
+        })),
+        'laporan_penjualan'
+      );
+    }
+    if (inventoryData?.products) {
+      exportToCSV(
+        inventoryData.products.map((p: Product) => ({
+          sku: p.sku,
+          nama_produk: p.name,
+          stok: p.stock_quantity,
+          reorder_level: p.reorder_level,
+          harga: p.price,
+          nilai_stok: p.stock_quantity * p.price,
+        })),
+        'laporan_inventori'
+      );
+    }
   };
+
+  // Siapkan data chart: grouping order per tanggal
+  const chartData = (() => {
+    if (!salesData?.orders?.length) return [];
+    const byDate: Record<string, number> = {};
+    salesData.orders.forEach((o: Order) => {
+      if (!o.created_at) return;
+      const d = format(new Date(o.created_at), 'dd MMM');
+      byDate[d] = (byDate[d] || 0) + o.total;
+    });
+    return Object.entries(byDate).map(([date, total]) => ({ date, total })).slice(-14);
+  })();
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
-          <p className="text-muted-foreground">
-            View and export business reports
-          </p>
+          <p className="text-muted-foreground">View and export business reports</p>
         </div>
-        <Button variant="outline">
+        {/* BUG-06 FIX: Export All tombol dengan handler nyata */}
+        <Button variant="outline" onClick={handleExportAll}>
           <Download className="mr-2 h-4 w-4" />
-          Export All
+          Export All (CSV)
         </Button>
       </div>
 
@@ -69,22 +131,39 @@ export default function Reports() {
         <TabsContent value="sales" className="space-y-6">
           <Card>
             <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Input
-                  type="date"
-                  placeholder="Start Date"
-                  value={startDate?.toISOString().split('T')[0] || ''}
-                  onChange={(e) => setStartDate(e.target.value ? new Date(e.target.value) : undefined)}
-                />
-                <Input
-                  type="date"
-                  placeholder="End Date"
-                  value={endDate?.toISOString().split('T')[0] || ''}
-                  onChange={(e) => setEndDate(e.target.value ? new Date(e.target.value) : undefined)}
-                />
-                <Button variant="outline">
+              <div className="flex flex-col sm:flex-row gap-4 items-end">
+                <div className="flex-1">
+                  <label className="text-sm font-medium mb-1 block">Dari Tanggal</label>
+                  <Input
+                    type="date"
+                    value={startDate?.toISOString().split('T')[0] || ''}
+                    onChange={(e) => setStartDate(e.target.value ? new Date(e.target.value) : undefined)}
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="text-sm font-medium mb-1 block">Sampai Tanggal</label>
+                  <Input
+                    type="date"
+                    value={endDate?.toISOString().split('T')[0] || ''}
+                    onChange={(e) => setEndDate(e.target.value ? new Date(e.target.value) : undefined)}
+                  />
+                </div>
+                {/* BUG-06 FIX: tombol export per tab dengan handler */}
+                <Button
+                  variant="outline"
+                  onClick={() => salesData?.orders && exportToCSV(
+                    salesData.orders.map((o: Order) => ({
+                      order_number: o.order_number || o.id.slice(0, 8),
+                      tanggal: o.created_at ? format(new Date(o.created_at), 'yyyy-MM-dd') : '-',
+                      status: o.status,
+                      payment_status: o.payment_status,
+                      total: o.total,
+                    })),
+                    'laporan_penjualan'
+                  )}
+                >
                   <FileText className="mr-2 h-4 w-4" />
-                  Generate PDF
+                  Export CSV
                 </Button>
               </div>
             </CardContent>
@@ -93,38 +172,52 @@ export default function Reports() {
           <div className="grid gap-4 md:grid-cols-3">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Penjualan</CardTitle>
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(salesData?.summary.totalSales || 0)}
-                </div>
+                <div className="text-2xl font-bold">{formatCurrency(salesData?.summary.totalSales || 0)}</div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Pesanan</CardTitle>
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {salesData?.summary.totalOrders || 0}
-                </div>
+                <div className="text-2xl font-bold">{salesData?.summary.totalOrders || 0}</div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Average Order</CardTitle>
+                <CardTitle className="text-sm font-medium">Rata-rata Pesanan</CardTitle>
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(salesData?.summary.averageOrder || 0)}
-                </div>
+                <div className="text-2xl font-bold">{formatCurrency(salesData?.summary.averageOrder || 0)}</div>
               </CardContent>
             </Card>
           </div>
+
+          {/* BUG-06 FIX: chart penjualan aktif */}
+          {chartData.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Grafik Penjualan (14 Hari Terakhir)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                    <YAxis tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} tick={{ fontSize: 12 }} />
+                    <Tooltip formatter={(v: number) => [formatCurrency(v), 'Total']} />
+                    <Bar dataKey="total" fill={CHART_COLOR} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
@@ -148,12 +241,8 @@ export default function Reports() {
                         <td className="py-3 px-4 text-muted-foreground">
                           {order.created_at ? format(new Date(order.created_at), 'MMM dd, yyyy') : '-'}
                         </td>
-                        <td className="py-3 px-4">
-                          <span className="capitalize">{order.status}</span>
-                        </td>
-                        <td className="py-3 px-4 text-right font-medium">
-                          {formatCurrency(order.total || 0)}
-                        </td>
+                        <td className="py-3 px-4 capitalize">{order.status}</td>
+                        <td className="py-3 px-4 text-right font-medium">{formatCurrency(order.total)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -164,49 +253,61 @@ export default function Reports() {
         </TabsContent>
 
         <TabsContent value="inventory" className="space-y-6">
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              onClick={() => inventoryData?.products && exportToCSV(
+                inventoryData.products.map((p: Product) => ({
+                  sku: p.sku,
+                  nama_produk: p.name,
+                  stok: p.stock_quantity,
+                  reorder_level: p.reorder_level,
+                  harga: p.price,
+                  nilai_stok: p.stock_quantity * p.price,
+                })),
+                'laporan_inventori'
+              )}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Export CSV
+            </Button>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Products</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Produk</CardTitle>
                 <Package className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {inventoryData?.summary.totalProducts || 0}
-                </div>
+                <div className="text-2xl font-bold">{inventoryData?.summary.totalProducts || 0}</div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Low Stock</CardTitle>
+                <CardTitle className="text-sm font-medium">Stok Menipis</CardTitle>
                 <TrendingUp className="h-4 w-4 text-amber-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-amber-500">
-                  {inventoryData?.summary.lowStock || 0}
-                </div>
+                <div className="text-2xl font-bold text-amber-500">{inventoryData?.summary.lowStock || 0}</div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Out of Stock</CardTitle>
+                <CardTitle className="text-sm font-medium">Stok Habis</CardTitle>
                 <Package className="h-4 w-4 text-destructive" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-destructive">
-                  {inventoryData?.summary.outOfStock || 0}
-                </div>
+                <div className="text-2xl font-bold text-destructive">{inventoryData?.summary.outOfStock || 0}</div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Value</CardTitle>
+                <CardTitle className="text-sm font-medium">Nilai Inventori</CardTitle>
                 <TrendingUp className="h-4 w-4 text-emerald-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-emerald-500">
-                  {formatCurrency(inventoryData?.summary.totalValue || 0)}
-                </div>
+                <div className="text-2xl font-bold text-emerald-500">{formatCurrency(inventoryData?.summary.totalValue || 0)}</div>
               </CardContent>
             </Card>
           </div>
@@ -220,10 +321,10 @@ export default function Reports() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b">
-                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Product</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Produk</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">SKU</th>
-                      <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Stock</th>
-                      <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Value</th>
+                      <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Stok</th>
+                      <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Nilai</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -233,16 +334,14 @@ export default function Reports() {
                         <td className="py-3 px-4 text-muted-foreground">{product.sku}</td>
                         <td className="py-3 px-4 text-center">
                           <span className={
-                            product.stock_quantity === 0 ? 'text-destructive' :
-                            product.stock_quantity <= product.reorder_level ? 'text-amber-500' :
+                            product.stock_quantity === 0 ? 'text-destructive font-medium' :
+                            product.stock_quantity <= product.reorder_level ? 'text-amber-500 font-medium' :
                             'text-emerald-500'
                           }>
                             {product.stock_quantity}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-right">
-                          {formatCurrency(product.stock_quantity * product.price)}
-                        </td>
+                        <td className="py-3 px-4 text-right">{formatCurrency(product.stock_quantity * product.price)}</td>
                       </tr>
                     ))}
                   </tbody>
