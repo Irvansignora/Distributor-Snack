@@ -84,15 +84,15 @@ export default function Products() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Products</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Produk</h1>
           <p className="text-muted-foreground">
-            Manage your product catalog and inventory
+            Kelola katalog produk dan inventori
           </p>
         </div>
         <Button asChild>
           <NavLink to="/admin/products/new">
             <Plus className="mr-2 h-4 w-4" />
-            Add Product
+            Tambah Produk
           </NavLink>
         </Button>
       </div>
@@ -104,7 +104,7 @@ export default function Products() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search products..."
+                placeholder="Cari produk..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10"
@@ -117,7 +117,7 @@ export default function Products() {
                 onClick={() => setShowLowStock(!showLowStock)}
               >
                 <AlertTriangle className="mr-2 h-4 w-4" />
-                Low Stock
+                Stok Menipis
               </Button>
               <Button variant="outline" size="sm">
                 <Filter className="mr-2 h-4 w-4" />
@@ -125,7 +125,7 @@ export default function Products() {
               </Button>
               <Button variant="outline" size="sm">
                 <Download className="mr-2 h-4 w-4" />
-                Export
+                Ekspor
               </Button>
             </div>
           </div>
@@ -148,15 +148,15 @@ export default function Products() {
       ) : data?.products.length === 0 ? (
         <Card className="p-12 text-center">
           <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium mb-2">No products found</h3>
+          <h3 className="text-lg font-medium mb-2">Produk tidak ditemukan</h3>
           <p className="text-muted-foreground mb-4">
-            {search ? 'Try adjusting your search' : 'Start by adding your first product'}
+            {search ? 'Coba ubah kata kunci pencarian' : 'Mulai dengan menambahkan produk pertama Anda'}
           </p>
           {!search && (
             <Button asChild>
               <NavLink to="/admin/products/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Add Product
+                Tambah Produk
               </NavLink>
             </Button>
           )}
@@ -182,17 +182,17 @@ export default function Products() {
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
               >
-                Previous
+                Sebelumnya
               </Button>
               <span className="flex items-center px-4 text-sm text-muted-foreground">
-                Page {page} of {data.pagination.totalPages}
+                Halaman {page} dari {data.pagination.totalPages}
               </span>
               <Button
                 variant="outline"
                 onClick={() => setPage(p => Math.min(data.pagination.totalPages, p + 1))}
                 disabled={page === data.pagination.totalPages}
               >
-                Next
+                Berikutnya
               </Button>
             </div>
           )}
@@ -255,7 +255,7 @@ function ProductCard({
         {(isLowStock || isOutOfStock) && (
           <div className="absolute top-2 left-2">
             <Badge variant={isOutOfStock ? 'destructive' : 'secondary'}>
-              {isOutOfStock ? 'Out of Stock' : 'Low Stock'}
+              {isOutOfStock ? 'Habis' : 'Stok Menipis'}
             </Badge>
           </div>
         )}
@@ -278,7 +278,7 @@ function ProductCard({
                 onClick={() => onDelete(product.id)}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
-                Delete
+                Hapus
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -295,7 +295,7 @@ function ProductCard({
           <div>
             <p className="text-lg font-bold">{formatCurrency(product.price)}</p>
             <p className="text-xs text-muted-foreground">
-              Wholesale: {formatCurrency(product.wholesale_price)}
+              Grosir: {formatCurrency(product.wholesale_price || 0)}
             </p>
           </div>
           <div className="text-right">
@@ -304,9 +304,9 @@ function ProductCard({
               isOutOfStock ? "text-destructive" :
               isLowStock ? "text-amber-500" : "text-emerald-500"
             )}>
-              {product.stock_quantity} {product.unit}
+              {product.stock_quantity} {product.unit_type || "karton"}
             </p>
-            <p className="text-xs text-muted-foreground">in stock</p>
+            <p className="text-xs text-muted-foreground">tersedia</p>
           </div>
         </div>
       </CardContent>
