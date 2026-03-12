@@ -3,52 +3,78 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  ShoppingCart,
-  Truck,
-  Shield,
-  Star,
-  Menu,
-  X,
-  Moon,
-  Sun,
-  Package,
-  Zap,
-  HeartHandshake,
-  ChevronRight,
-  Phone,
-  Mail,
-  MapPin,
+  ShoppingCart, Truck, Shield, Star, Menu, X, Moon, Sun,
+  Package, Zap, HeartHandshake, ChevronRight, Phone, Mail, MapPin, Loader2,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
 
-const categories = [
-  { name: 'Keripik & Chips', emoji: '🥔', count: '120+ produk' },
-  { name: 'Coklat & Permen', emoji: '🍫', count: '80+ produk' },
-  { name: 'Biskuit & Wafer', emoji: '🍪', count: '95+ produk' },
-  { name: 'Kacang & Biji', emoji: '🥜', count: '60+ produk' },
-  { name: 'Minuman Ringan', emoji: '🧃', count: '70+ produk' },
-  { name: 'Snack Sehat', emoji: '🌾', count: '45+ produk' },
-];
+// Fetch public settings (no auth needed)
+const API_BASE = import.meta.env.VITE_API_URL || 'https://be-distributor-snack.vercel.app/api';
 
-const featuredProducts = [
-  { name: 'Keripik Singkong Original', price: 'Rp 12.500', originalPrice: 'Rp 15.000', badge: 'Terlaris', emoji: '🥔', rating: 4.8, sold: '2.4rb terjual' },
-  { name: 'Choco Wafer Crispy', price: 'Rp 8.000', originalPrice: null, badge: 'Baru', emoji: '🍫', rating: 4.6, sold: '890 terjual' },
-  { name: 'Kacang Mete Panggang', price: 'Rp 35.000', originalPrice: 'Rp 42.000', badge: 'Diskon 17%', emoji: '🥜', rating: 4.9, sold: '1.2rb terjual' },
-  { name: 'Biskuit Kelapa Susu', price: 'Rp 9.500', originalPrice: null, badge: null, emoji: '🍪', rating: 4.5, sold: '560 terjual' },
-];
+function usePublicSettings() {
+  return useQuery({
+    queryKey: ['public-settings'],
+    queryFn: async () => {
+      const { data } = await axios.get(`${API_BASE}/settings/public`);
+      return data.settings as Record<string, any>;
+    },
+    staleTime: 5 * 60 * 1000, // 5 min cache
+  });
+}
+
+function usePublicProducts() {
+  return useQuery({
+    queryKey: ['public-products'],
+    queryFn: async () => {
+      const { data } = await axios.get(`${API_BASE}/products/public`);
+      return data.products as any[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+function usePublicCategories() {
+  return useQuery({
+    queryKey: ['public-categories'],
+    queryFn: async () => {
+      const { data } = await axios.get(`${API_BASE}/categories/public`);
+      return data.categories as any[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+const CATEGORY_EMOJIS: Record<string, string> = {
+  'keripik': '🥔', 'chips': '🥔', 'coklat': '🍫', 'chocolate': '🍫',
+  'biskuit': '🍪', 'wafer': '🍪', 'kacang': '🥜', 'nuts': '🥜',
+  'minuman': '🧃', 'drink': '🧃', 'sehat': '🌾', 'permen': '🍬',
+  'candy': '🍬', 'snack': '🍿', 'mie': '🍜',
+};
+
+function getCategoryEmoji(name: string): string {
+  const lower = name.toLowerCase();
+  for (const [key, emoji] of Object.entries(CATEGORY_EMOJIS)) {
+    if (lower.includes(key)) return emoji;
+  }
+  return '📦';
+}
+
+const PRODUCT_EMOJIS = ['🥔', '🍫', '🥜', '🍪', '🧃', '🌾', '🍬', '🍿', '🌮', '🍭'];
 
 const benefits = [
-  { icon: Truck, title: 'Pengiriman Cepat', description: 'Estimasi 1-3 hari kerja ke seluruh Indonesia', color: 'text-blue-500', bg: 'bg-blue-500/10' },
+  { icon: Truck, title: 'Pengiriman Cepat', description: 'Estimasi 1–3 hari kerja ke seluruh Indonesia', color: 'text-blue-500', bg: 'bg-blue-500/10' },
   { icon: Shield, title: 'Produk Terjamin', description: 'Semua produk telah terdaftar BPOM & halal MUI', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   { icon: Zap, title: 'Harga Distributor', description: 'Langsung dari distributor, harga lebih hemat', color: 'text-amber-500', bg: 'bg-amber-500/10' },
   { icon: HeartHandshake, title: 'Layanan Terpercaya', description: 'CS siap membantu 7 hari seminggu', color: 'text-rose-500', bg: 'bg-rose-500/10' },
 ];
 
 const testimonials = [
-  { name: 'Budi Santoso', role: 'Pemilik Warung', city: 'Surabaya', content: 'Udah 2 tahun belanja di sini, harga bersaing dan produknya lengkap banget. Pengiriman juga cepat!', rating: 5 },
-  { name: 'Siti Rahayu', role: 'Reseller Online', city: 'Bandung', content: 'Stok selalu ready, packagingnya aman, dan kalau ada pertanyaan CS-nya responsif. Highly recommended!', rating: 5 },
+  { name: 'Budi Santoso', role: 'Pemilik Warung', city: 'Surabaya', content: 'Udah 2 tahun belanja di sini, harga bersaing dan produknya lengkap banget!', rating: 5 },
+  { name: 'Siti Rahayu', role: 'Reseller Online', city: 'Bandung', content: 'Stok selalu ready, packagingnya aman, dan CS-nya responsif. Highly recommended!', rating: 5 },
   { name: 'Agus Firmansyah', role: 'Pemilik Minimarket', city: 'Semarang', content: 'Harga grosirnya kompetitif dan bisa pesan dalam jumlah besar. Jadi langganan tetap!', rating: 5 },
 ];
 
@@ -57,11 +83,58 @@ export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const { resolvedTheme, setTheme } = useTheme();
 
+  const { data: settings = {} } = usePublicSettings();
+  const { data: products = [], isLoading: productsLoading } = usePublicProducts();
+  const { data: categories = [], isLoading: categoriesLoading } = usePublicCategories();
+
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  const appName = settings.app_name ?? 'SnackHub';
+  const heroTitle = settings.landing_hero_title ?? 'Snack Lezat, Harga Distributor Langsung ke Tangan Anda';
+  const heroSubtitle = settings.landing_hero_subtitle ?? 'Ribuan pilihan snack berkualitas dari distributor terpercaya. Cocok untuk warung, toko, reseller, maupun konsumsi pribadi.';
+  const promoBadge = settings.landing_promo_badge ?? '🎉 Promo Akhir Bulan — Diskon hingga 25%!';
+  const statsProducts = settings.landing_stats_products ?? '500+';
+  const statsCustomers = settings.landing_stats_customers ?? '10rb+';
+  const statsRating = settings.landing_stats_rating ?? '4.9⭐';
+  const aboutTitle = settings.landing_about_title ?? `Distributor Snack Terpercaya`;
+  const aboutDesc = settings.landing_about_desc ?? 'Kami menyuplai lebih dari 10.000 toko, warung, dan reseller di seluruh Indonesia dengan harga terbaik langsung dari produsen.';
+  const aboutYear = settings.landing_about_year ? parseInt(settings.landing_about_year) : 2015;
+  const yearsExperience = new Date().getFullYear() - aboutYear;
+  const contactPhone = settings.landing_contact_phone ?? '+62 812-3456-7890';
+  const contactEmail = settings.landing_contact_email ?? `cs@snackhub.id`;
+  const contactAddress = settings.landing_contact_address ?? 'Jl. Raya Industri No. 88';
+  const contactCity = settings.landing_contact_city ?? 'Jakarta Timur, DKI Jakarta';
+
+  // Products display (real or fallback)
+  const displayProducts = products.length > 0
+    ? products.slice(0, 4).map((p: any, i: number) => ({
+        name: p.name,
+        price: p.price ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(p.price) : 'Hubungi Kami',
+        image_url: p.image_url,
+        emoji: PRODUCT_EMOJIS[i % PRODUCT_EMOJIS.length],
+        badge: p.is_featured ? 'Unggulan' : null,
+      }))
+    : [];
+
+  // Categories display (real or fallback)
+  const displayCategories = categories.length > 0
+    ? categories.slice(0, 6).map((c: any) => ({
+        name: c.name,
+        emoji: getCategoryEmoji(c.name),
+        count: `${c.product_count || ''}${c.product_count ? '+ produk' : 'Lihat produk'}`,
+      }))
+    : [
+        { name: 'Keripik & Chips', emoji: '🥔', count: 'Lihat produk' },
+        { name: 'Coklat & Permen', emoji: '🍫', count: 'Lihat produk' },
+        { name: 'Biskuit & Wafer', emoji: '🍪', count: 'Lihat produk' },
+        { name: 'Kacang & Biji', emoji: '🥜', count: 'Lihat produk' },
+        { name: 'Minuman Ringan', emoji: '🧃', count: 'Lihat produk' },
+        { name: 'Snack Sehat', emoji: '🌾', count: 'Lihat produk' },
+      ];
 
   return (
     <div className="min-h-screen bg-background">
@@ -77,7 +150,7 @@ export default function LandingPage() {
                 <Package className="h-5 w-5 text-primary-foreground" />
               </div>
               <div>
-                <span className="font-bold text-lg leading-none">SnackHub</span>
+                <span className="font-bold text-lg leading-none">{appName}</span>
                 <p className="text-xs text-muted-foreground leading-none">Distributor Snack</p>
               </div>
             </NavLink>
@@ -130,17 +203,22 @@ export default function LandingPage() {
         <div className="container mx-auto max-w-6xl">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-6">
-              <Badge variant="secondary" className="text-sm bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800">
-                🎉 Promo Akhir Bulan — Diskon hingga 25%!
-              </Badge>
+              {promoBadge && (
+                <Badge variant="secondary" className="text-sm bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800">
+                  {promoBadge}
+                </Badge>
+              )}
               <h1 className="text-4xl lg:text-5xl font-bold leading-tight">
-                Snack Lezat,{' '}
-                <span className="text-primary">Harga Distributor</span>{' '}
-                Langsung ke Tangan Anda
+                {heroTitle.includes(',') ? (
+                  <>
+                    {heroTitle.split(',')[0]},{' '}
+                    <span className="text-primary">{heroTitle.split(',').slice(1).join(',').trim()}</span>
+                  </>
+                ) : (
+                  <span>{heroTitle}</span>
+                )}
               </h1>
-              <p className="text-lg text-muted-foreground max-w-lg">
-                Ribuan pilihan snack berkualitas dari distributor terpercaya. Cocok untuk warung, toko, reseller, maupun konsumsi pribadi.
-              </p>
+              <p className="text-lg text-muted-foreground max-w-lg">{heroSubtitle}</p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button size="lg" asChild>
                   <NavLink to="/register">
@@ -154,17 +232,17 @@ export default function LandingPage() {
               </div>
               <div className="flex items-center gap-6 pt-2">
                 <div className="text-center">
-                  <p className="text-2xl font-bold">500+</p>
+                  <p className="text-2xl font-bold">{statsProducts}</p>
                   <p className="text-xs text-muted-foreground">Jenis Produk</p>
                 </div>
                 <div className="w-px h-10 bg-border" />
                 <div className="text-center">
-                  <p className="text-2xl font-bold">10rb+</p>
+                  <p className="text-2xl font-bold">{statsCustomers}</p>
                   <p className="text-xs text-muted-foreground">Pelanggan Aktif</p>
                 </div>
                 <div className="w-px h-10 bg-border" />
                 <div className="text-center">
-                  <p className="text-2xl font-bold">4.9⭐</p>
+                  <p className="text-2xl font-bold">{statsRating}</p>
                   <p className="text-xs text-muted-foreground">Rating Toko</p>
                 </div>
               </div>
@@ -172,10 +250,18 @@ export default function LandingPage() {
             <div className="relative hidden lg:block">
               <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-amber-400/20 rounded-3xl blur-3xl" />
               <div className="relative grid grid-cols-2 gap-4">
-                {featuredProducts.map((p, i) => (
+                {(displayProducts.length > 0 ? displayProducts : [
+                  { name: 'Keripik Singkong Original', price: 'Rp 12.500', emoji: '🥔', badge: 'Terlaris', image_url: null },
+                  { name: 'Choco Wafer Crispy', price: 'Rp 8.000', emoji: '🍫', badge: 'Baru', image_url: null },
+                  { name: 'Kacang Mete Panggang', price: 'Rp 35.000', emoji: '🥜', badge: null, image_url: null },
+                  { name: 'Biskuit Kelapa Susu', price: 'Rp 9.500', emoji: '🍪', badge: null, image_url: null },
+                ]).map((p: any, i: number) => (
                   <Card key={i} className={cn("overflow-hidden border hover:shadow-lg transition-all", i === 1 && "mt-8")}>
-                    <div className="aspect-square bg-gradient-to-br from-amber-50 to-orange-100 dark:from-amber-950/30 dark:to-orange-950/30 flex items-center justify-center text-5xl">
-                      {p.emoji}
+                    <div className="aspect-square bg-gradient-to-br from-amber-50 to-orange-100 dark:from-amber-950/30 dark:to-orange-950/30 flex items-center justify-center overflow-hidden">
+                      {p.image_url
+                        ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                        : <span className="text-5xl">{p.emoji}</span>
+                      }
                     </div>
                     <CardContent className="p-3">
                       <p className="text-xs font-medium line-clamp-1">{p.name}</p>
@@ -216,19 +302,23 @@ export default function LandingPage() {
             <h2 className="text-3xl lg:text-4xl font-bold mb-3">Temukan Snack Favoritmu</h2>
             <p className="text-muted-foreground">Ratusan pilihan dari berbagai kategori snack terlengkap</p>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {categories.map((cat, i) => (
-              <NavLink to="/register" key={i}>
-                <Card className="group cursor-pointer hover:shadow-md hover:border-primary/50 transition-all text-center">
-                  <CardContent className="p-4">
-                    <div className="text-4xl mb-2 group-hover:scale-110 transition-transform">{cat.emoji}</div>
-                    <p className="text-sm font-semibold leading-tight">{cat.name}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{cat.count}</p>
-                  </CardContent>
-                </Card>
-              </NavLink>
-            ))}
-          </div>
+          {categoriesLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {displayCategories.map((cat, i) => (
+                <NavLink to="/register" key={i}>
+                  <Card className="group cursor-pointer hover:shadow-md hover:border-primary/50 transition-all text-center">
+                    <CardContent className="p-4">
+                      <div className="text-4xl mb-2 group-hover:scale-110 transition-transform">{cat.emoji}</div>
+                      <p className="text-sm font-semibold leading-tight">{cat.name}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{cat.count}</p>
+                    </CardContent>
+                  </Card>
+                </NavLink>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -244,40 +334,46 @@ export default function LandingPage() {
               <NavLink to="/register">Lihat Semua <ChevronRight className="ml-1 h-4 w-4" /></NavLink>
             </Button>
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {featuredProducts.map((product, i) => (
-              <Card key={i} className="overflow-hidden group hover:shadow-lg transition-all">
-                <div className="aspect-square bg-gradient-to-br from-amber-50 to-orange-100 dark:from-amber-950/30 dark:to-orange-950/30 relative flex items-center justify-center text-6xl group-hover:scale-105 transition-transform">
-                  {product.emoji}
-                  {product.badge && (
-                    <div className="absolute top-2 left-2">
-                      <Badge className={cn("text-xs",
-                        product.badge === 'Terlaris' && 'bg-rose-500 hover:bg-rose-500',
-                        product.badge === 'Baru' && 'bg-blue-500 hover:bg-blue-500',
-                        product.badge?.includes('Diskon') && 'bg-emerald-500 hover:bg-emerald-500',
-                      )}>{product.badge}</Badge>
-                    </div>
-                  )}
-                </div>
-                <CardContent className="p-4">
-                  <h3 className="font-medium text-sm line-clamp-2 mb-1">{product.name}</h3>
-                  <div className="flex items-center gap-1 mb-2">
-                    <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                    <span className="text-xs text-muted-foreground">{product.rating} • {product.sold}</span>
+          {productsLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {(displayProducts.length > 0 ? displayProducts : [
+                { name: 'Keripik Singkong Original', price: 'Rp 12.500', emoji: '🥔', badge: 'Terlaris', image_url: null },
+                { name: 'Choco Wafer Crispy', price: 'Rp 8.000', emoji: '🍫', badge: 'Baru', image_url: null },
+                { name: 'Kacang Mete Panggang', price: 'Rp 35.000', emoji: '🥜', badge: 'Diskon 17%', image_url: null },
+                { name: 'Biskuit Kelapa Susu', price: 'Rp 9.500', emoji: '🍪', badge: null, image_url: null },
+              ]).map((product: any, i: number) => (
+                <Card key={i} className="overflow-hidden group hover:shadow-lg transition-all">
+                  <div className="aspect-square bg-gradient-to-br from-amber-50 to-orange-100 dark:from-amber-950/30 dark:to-orange-950/30 relative flex items-center justify-center overflow-hidden group-hover:scale-105 transition-transform">
+                    {product.image_url
+                      ? <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                      : <span className="text-6xl">{product.emoji}</span>
+                    }
+                    {product.badge && (
+                      <div className="absolute top-2 left-2">
+                        <Badge className={cn("text-xs",
+                          product.badge === 'Terlaris' && 'bg-rose-500 hover:bg-rose-500',
+                          product.badge === 'Baru' && 'bg-blue-500 hover:bg-blue-500',
+                          product.badge === 'Unggulan' && 'bg-amber-500 hover:bg-amber-500',
+                          product.badge?.includes('Diskon') && 'bg-emerald-500 hover:bg-emerald-500',
+                        )}>{product.badge}</Badge>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <CardContent className="p-4">
+                    <h3 className="font-medium text-sm line-clamp-2 mb-1">{product.name}</h3>
+                    <div className="flex items-center justify-between mt-2">
                       <p className="font-bold text-primary">{product.price}</p>
-                      {product.originalPrice && <p className="text-xs text-muted-foreground line-through">{product.originalPrice}</p>}
+                      <Button size="sm" asChild>
+                        <NavLink to="/register"><ShoppingCart className="h-3 w-3" /></NavLink>
+                      </Button>
                     </div>
-                    <Button size="sm" asChild>
-                      <NavLink to="/register"><ShoppingCart className="h-3 w-3" /></NavLink>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -289,10 +385,10 @@ export default function LandingPage() {
             <CardContent className="p-10 lg:p-16 relative">
               <div className="max-w-2xl">
                 <Badge variant="secondary" className="mb-4 bg-primary-foreground/20 text-primary-foreground border-primary-foreground/30">Kenapa Pilih Kami?</Badge>
-                <h2 className="text-3xl lg:text-4xl font-bold mb-4">Distributor Snack Terpercaya sejak 2015</h2>
-                <p className="text-primary-foreground/80 mb-8 text-lg">Kami menyuplai lebih dari 10.000 toko, warung, dan reseller di seluruh Indonesia dengan harga terbaik langsung dari produsen.</p>
+                <h2 className="text-3xl lg:text-4xl font-bold mb-4">{aboutTitle}</h2>
+                <p className="text-primary-foreground/80 mb-8 text-lg">{aboutDesc}</p>
                 <div className="grid grid-cols-3 gap-6 mb-8">
-                  <div><p className="text-3xl font-bold">9 Thn</p><p className="text-sm text-primary-foreground/70">Pengalaman</p></div>
+                  <div><p className="text-3xl font-bold">{yearsExperience} Thn</p><p className="text-sm text-primary-foreground/70">Pengalaman</p></div>
                   <div><p className="text-3xl font-bold">50+</p><p className="text-sm text-primary-foreground/70">Brand Partner</p></div>
                   <div><p className="text-3xl font-bold">34</p><p className="text-sm text-primary-foreground/70">Provinsi</p></div>
                 </div>
@@ -345,9 +441,9 @@ export default function LandingPage() {
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { icon: Phone, title: 'Telepon / WhatsApp', value: '+62 812-3456-7890', sub: 'Senin–Sabtu, 08.00–17.00' },
-              { icon: Mail, title: 'Email', value: 'cs@snackhub.id', sub: 'Balasan dalam 1x24 jam' },
-              { icon: MapPin, title: 'Alamat Gudang', value: 'Jl. Raya Industri No. 88', sub: 'Jakarta Timur, DKI Jakarta' },
+              { icon: Phone, title: 'Telepon / WhatsApp', value: contactPhone, sub: 'Senin–Sabtu, 08.00–17.00' },
+              { icon: Mail, title: 'Email', value: contactEmail, sub: 'Balasan dalam 1×24 jam' },
+              { icon: MapPin, title: 'Alamat Gudang', value: contactAddress, sub: contactCity },
             ].map((item, i) => (
               <Card key={i}>
                 <CardContent className="p-6 text-center">
@@ -385,7 +481,7 @@ export default function LandingPage() {
                   <Package className="h-5 w-5 text-primary-foreground" />
                 </div>
                 <div>
-                  <span className="font-bold text-lg leading-none">SnackHub</span>
+                  <span className="font-bold text-lg leading-none">{appName}</span>
                   <p className="text-xs text-muted-foreground">Distributor Snack</p>
                 </div>
               </div>
@@ -420,7 +516,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="pt-8 border-t text-center text-sm text-muted-foreground">
-            <p>© 2024 SnackHub Distributor. All rights reserved.</p>
+            <p>© {new Date().getFullYear()} {appName} Distributor. All rights reserved.</p>
           </div>
         </div>
       </footer>
