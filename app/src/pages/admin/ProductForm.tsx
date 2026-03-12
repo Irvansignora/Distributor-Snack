@@ -148,12 +148,6 @@ export default function ProductForm() {
       if (value !== '') data.append(key, value);
     });
 
-    // Map ke field lama juga untuk kompatibilitas backend
-    const bronzeTier = tiers.find(t => t.tier === 'bronze');
-    if (bronzeTier?.price_per_karton) {
-      data.append('price', bronzeTier.price_per_karton);
-      data.append('wholesale_price', bronzeTier.price_per_karton);
-    }
     data.append('stock_quantity', formData.stock_karton);
 
     // Kirim price_tiers sebagai JSON
