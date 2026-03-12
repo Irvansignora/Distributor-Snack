@@ -44,11 +44,13 @@ export default function Orders() {
   const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['orders', status, page],
+    queryKey: ['orders', status, page, search],
     queryFn: () => orderService.getOrders({
       status: status === 'all' ? undefined : status,
       page,
       limit: 10,
+      // BUG-05 FIX: kirim search ke API
+      supplier_id: search || undefined,
     }),
   });
 
