@@ -12,7 +12,8 @@ import {
   Clock,
   CheckCircle,
   ArrowRight,
-  TrendingUp
+  TrendingUp,
+  AlertCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -22,8 +23,8 @@ export default function SupplierDashboard() {
     queryFn: () => orderService.getOrders({ limit: 5 }),
   });
 
-  // Payments data can be used later for notifications
-  useQuery({
+  // BUG-12 FIX: gunakan data payments untuk tampilkan status pembayaran pending
+  const { data: paymentsData } = useQuery({
     queryKey: ['my-payments'],
     queryFn: () => paymentService.getPayments({ limit: 5 }),
   });
@@ -33,6 +34,9 @@ export default function SupplierDashboard() {
   const totalSpent = ordersData?.orders
     .filter(o => o.status === 'completed')
     .reduce((sum, o) => sum + o.total, 0) || 0;
+
+  // BUG-12 FIX: hitung payment pending
+  const pendingPayments = paymentsData?.payments.filter(p => p.status === 'pending').length || 0;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -51,6 +55,19 @@ export default function SupplierDashboard() {
           Ini ringkasan belanja dan aktivitas akun kamu.
         </p>
       </div>
+
+      {/* BUG-12 FIX: tampilkan notifikasi pembayaran pending */}
+      {pendingPayments > 0 && (
+        <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+          <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            Anda memiliki <strong>{pendingPayments} pembayaran</strong> yang menunggu verifikasi admin.
+          </p>
+          <Button size="sm" variant="outline" asChild className="ml-auto flex-shrink-0">
+            <NavLink to="/supplier/invoices">Lihat</NavLink>
+          </Button>
+        </div>
+      )}
 
       {/* Quick Stats */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
