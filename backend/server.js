@@ -641,8 +641,10 @@ app.post('/api/products', auth, requireRole(['admin','staff']),
       if (productData.weight_gram) productData.weight_gram = parseInt(productData.weight_gram);
 
       // Handle legacy field names from frontend
-      if (productData.stock_quantity && !productData.stock_karton) {
-        productData.stock_karton = parseInt(productData.stock_quantity);
+      if (productData.stock_quantity !== undefined) {
+        if (!productData.stock_karton) {
+          productData.stock_karton = parseInt(productData.stock_quantity);
+        }
         delete productData.stock_quantity;
       }
       // Remove fields that don't exist in products table (price is in price_tiers)
