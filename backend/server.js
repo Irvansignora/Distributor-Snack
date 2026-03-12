@@ -633,10 +633,20 @@ app.post('/api/products', auth, requireRole(['admin','staff']),
     try {
       const { price_tiers, ...productData } = req.body;
 
+      // Auto-generate slug from name + timestamp (slug is UNIQUE NOT NULL in DB)
+      if (!productData.slug && productData.name) {
+        productData.slug = productData.name
+          .toLowerCase()
+          .replace(/[^a-z0-9\s-]/g, '')
+          .trim()
+          .replace(/\s+/g, '-')
+          + '-' + Date.now();
+      }
+
       // Parse numeric fields
       if (productData.pcs_per_pack) productData.pcs_per_pack = parseInt(productData.pcs_per_pack);
       if (productData.pack_per_karton) productData.pack_per_karton = parseInt(productData.pack_per_karton);
-      if (productData.stock_karton) productData.stock_karton = parseInt(productData.stock_karton);
+      if (productData.stock_karton !== undefined) productData.stock_karton = parseInt(productData.stock_karton) || 0;
       if (productData.reorder_level) productData.reorder_level = parseInt(productData.reorder_level);
       if (productData.weight_gram) productData.weight_gram = parseInt(productData.weight_gram);
 
@@ -682,7 +692,7 @@ app.put('/api/products/:id', auth, requireRole(['admin','staff']), async (req, r
 
     // Handle legacy field names
     if (productData.stock_quantity !== undefined) {
-      productData.stock_karton = parseInt(productData.stock_quantity);
+      if (!productData.stock_karton) productData.stock_karton = parseInt(productData.stock_quantity) || 0;
       delete productData.stock_quantity;
     }
     // Remove fields that don't exist in products table (price is in price_tiers)
