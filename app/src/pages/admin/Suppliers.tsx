@@ -82,13 +82,13 @@ export default function Suppliers() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Suppliers</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Pelanggan</h1>
           <p className="text-muted-foreground">Kelola data toko & reseller</p>
         </div>
         {/* BUG-08 FIX: tombol Add Supplier membuka dialog */}
         <Button onClick={() => setAddDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          Add Supplier
+          Tambah Pelanggan
         </Button>
       </div>
 
@@ -114,7 +114,7 @@ export default function Suppliers() {
         ) : filteredSuppliers?.length === 0 ? (
           <Card className="col-span-full p-12 text-center">
             <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">No suppliers found</h3>
+            <h3 className="text-lg font-medium mb-2">Belum ada pelanggan</h3>
           </Card>
         ) : (
           filteredSuppliers?.map((supplier) => (
@@ -247,13 +247,13 @@ function SupplierCard({
 
         <div className="mt-4 pt-4 border-t flex items-center justify-between">
           <div>
-            <p className="text-xs text-muted-foreground">Credit Limit</p>
+            <p className="text-xs text-muted-foreground">Limit Kredit</p>
             <p className="font-medium">{formatCurrency(supplier.credit_limit || 0)}</p>
           </div>
           <Button variant="ghost" size="sm" asChild>
             <NavLink to={`/admin/suppliers/${supplier.id}`}>
               <Eye className="mr-2 h-4 w-4" />
-              View
+              Lihat
             </NavLink>
           </Button>
         </div>
