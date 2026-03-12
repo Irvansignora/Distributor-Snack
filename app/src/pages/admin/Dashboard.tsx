@@ -318,12 +318,12 @@ export default function AdminDashboard() {
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-muted-foreground">Memuat...</td>
                   </tr>
-                ) : recentOrders?.orders.length === 0 ? (
+                ) : recentOrders?.orders?.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-muted-foreground">Belum ada pesanan</td>
                   </tr>
                 ) : (
-                  recentOrders?.orders.map((order) => (
+                  recentOrders?.orders?.map((order) => (
                     <tr key={order.id} className="border-b hover:bg-muted/50">
                       <td className="py-3 px-4 text-sm font-medium">#{order.order_number || order.id.slice(0, 8)}</td>
                       <td className="py-3 px-4 text-sm">{order.users?.company_name || order.users?.name}</td>
