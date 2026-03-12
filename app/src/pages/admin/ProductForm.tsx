@@ -214,7 +214,7 @@ export default function ProductForm() {
                   <Select value={formData.category_id} onValueChange={v => setFormData({ ...formData, category_id: v })}>
                     <SelectTrigger><SelectValue placeholder="Pilih kategori" /></SelectTrigger>
                     <SelectContent>
-                      {categories?.categories.map((cat: any) => (
+                      {categories?.categories?.map((cat: any) => (
                         <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                       ))}
                     </SelectContent>
