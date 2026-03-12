@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useCart } from '@/hooks/useCart';
+import { useTax } from '@/contexts/TaxContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,8 @@ import { toast } from 'sonner';
 export default function Cart() {
   const navigate = useNavigate();
   const { items, updateQuantity, removeFromCart, total, clearCart } = useCart();
+  // BUG-01 FIX: pakai tax dari TaxContext bukan hardcode 0.1
+  const { taxRate, taxPercent } = useTax();
   const [notes, setNotes] = useState('');
 
   const formatCurrency = (value: number) => {
@@ -29,7 +32,8 @@ export default function Cart() {
     }).format(value);
   };
 
-  const tax = total * 0.1; // 10% tax
+  // BUG-01 FIX: hitung tax dari TaxContext
+  const tax = total * taxRate;
   const grandTotal = total + tax;
 
   if (items.length === 0) {
@@ -162,8 +166,9 @@ export default function Cart() {
                   <span className="text-muted-foreground">Subtotal</span>
                   <span>{formatCurrency(total)}</span>
                 </div>
+                {/* BUG-01 FIX: tampilkan tax rate dari setting, bukan hardcode */}
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tax (10%)</span>
+                  <span className="text-muted-foreground">PPN ({taxPercent}%)</span>
                   <span>{formatCurrency(tax)}</span>
                 </div>
                 <Separator />
@@ -174,18 +179,21 @@ export default function Cart() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Order Notes (Optional)</label>
+                <label className="text-sm font-medium">Catatan Pesanan (Opsional)</label>
                 <Input
-                  placeholder="Add any special instructions..."
+                  placeholder="Tambahkan instruksi khusus..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                 />
               </div>
 
-              <Button 
-                className="w-full" 
+              {/* BUG-01 FIX: pass tax, subtotal, grandTotal ke Checkout via state */}
+              <Button
+                className="w-full"
                 size="lg"
-                onClick={() => navigate('/supplier/checkout', { state: { notes } })}
+                onClick={() => navigate('/supplier/checkout', {
+                  state: { notes, subtotal: total, tax, grandTotal, taxPercent }
+                })}
               >
                 Proceed to Checkout
                 <ArrowRight className="ml-2 h-4 w-4" />
