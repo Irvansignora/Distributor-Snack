@@ -1,20 +1,11 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { NavLink } from 'react-router-dom';
 import { supplierService } from '@/services/suppliers';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
 import {
   Search,
   Users,
@@ -22,37 +13,16 @@ import {
   Plus,
   Building2,
   Mail,
-  Phone,
-  Loader2,
+  Phone
 } from 'lucide-react';
-import { toast } from 'sonner';
 import type { User } from '@/types';
 
 export default function Suppliers() {
   const [search, setSearch] = useState('');
-  // BUG-08 FIX: state dialog tambah supplier
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', password: '', company_name: '', phone: '' });
-
-  const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ['suppliers'],
     queryFn: supplierService.getSuppliers,
-  });
-
-  // BUG-08 FIX: mutation untuk tambah supplier via admin
-  const addMutation = useMutation({
-    mutationFn: supplierService.createSupplier,
-    onSuccess: () => {
-      toast.success('Supplier berhasil ditambahkan');
-      setAddDialogOpen(false);
-      setForm({ name: '', email: '', password: '', company_name: '', phone: '' });
-      queryClient.invalidateQueries({ queryKey: ['suppliers'] });
-    },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Gagal menambahkan supplier');
-    },
   });
 
   const filteredSuppliers = data?.suppliers.filter(s =>
@@ -61,21 +31,12 @@ export default function Suppliers() {
     s.email.toLowerCase().includes(search.toLowerCase())
   );
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = (value: number | null | undefined) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
-    }).format(value);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name || !form.email || !form.password) {
-      toast.error('Nama, email, dan password wajib diisi');
-      return;
-    }
-    addMutation.mutate(form);
+    }).format(value || 0);
   };
 
   return (
@@ -83,10 +44,11 @@ export default function Suppliers() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Suppliers</h1>
-          <p className="text-muted-foreground">Kelola data toko & reseller</p>
+          <p className="text-muted-foreground">
+            Kelola data toko & reseller
+          </p>
         </div>
-        {/* BUG-08 FIX: tombol Add Supplier membuka dialog */}
-        <Button onClick={() => setAddDialogOpen(true)}>
+        <Button>
           <Plus className="mr-2 h-4 w-4" />
           Add Supplier
         </Button>
@@ -108,9 +70,7 @@ export default function Suppliers() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {isLoading ? (
-          <div className="col-span-full flex justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
+          <div>Loading...</div>
         ) : filteredSuppliers?.length === 0 ? (
           <Card className="col-span-full p-12 text-center">
             <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -126,83 +86,6 @@ export default function Suppliers() {
           ))
         )}
       </div>
-
-      {/* BUG-08 FIX: Dialog form tambah supplier */}
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Tambah Supplier Baru</DialogTitle>
-            <DialogDescription>
-              Tambahkan akun customer/reseller baru ke sistem
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit}>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="sup-name">Nama Lengkap *</Label>
-                <Input
-                  id="sup-name"
-                  value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="Nama pemilik toko"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sup-company">Nama Toko / Perusahaan</Label>
-                <Input
-                  id="sup-company"
-                  value={form.company_name}
-                  onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))}
-                  placeholder="Nama toko atau perusahaan"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sup-email">Email *</Label>
-                <Input
-                  id="sup-email"
-                  type="email"
-                  value={form.email}
-                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                  placeholder="email@example.com"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sup-phone">No. Telepon</Label>
-                <Input
-                  id="sup-phone"
-                  value={form.phone}
-                  onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                  placeholder="08xxxxxxxxxx"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sup-password">Password Awal *</Label>
-                <Input
-                  id="sup-password"
-                  type="password"
-                  value={form.password}
-                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                  placeholder="Minimal 6 karakter"
-                  required
-                  minLength={6}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setAddDialogOpen(false)}>
-                Batal
-              </Button>
-              <Button type="submit" disabled={addMutation.isPending}>
-                {addMutation.isPending ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menyimpan...</>
-                ) : 'Tambah Supplier'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
