@@ -16,19 +16,21 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('cart');
-      return saved ? JSON.parse(saved) : [];
+      try {
+        const saved = localStorage.getItem('cart');
+        return saved ? JSON.parse(saved) : [];
+      } catch {
+        return [];
+      }
     }
     return [];
   });
-
-
 
   const addToCart = useCallback((product: Product, quantity: number) => {
     setItems((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
       let newItems;
-      
+
       if (existing) {
         newItems = prev.map((item) =>
           item.product.id === product.id
@@ -38,7 +40,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       } else {
         newItems = [...prev, { product, quantity }];
       }
-      
+
       localStorage.setItem('cart', JSON.stringify(newItems));
       return newItems;
     });
@@ -57,7 +59,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       removeFromCart(productId);
       return;
     }
-    
+
     setItems((prev) => {
       const newItems = prev.map((item) =>
         item.product.id === productId ? { ...item, quantity } : item
@@ -67,11 +69,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   }, [removeFromCart]);
 
+  // BUG-10 FIX: clearCart juga hapus dari localStorage
   const clearCart = useCallback(() => {
     setItems([]);
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('cart');
-    }
+    localStorage.removeItem('cart');
   }, []);
 
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -104,3 +105,4 @@ export function useCart() {
   }
   return context;
 }
+
