@@ -107,7 +107,7 @@ export default function Reports() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
-          <p className="text-muted-foreground">View and export business reports</p>
+          <p className="text-muted-foreground">Lihat dan ekspor laporan bisnis</p>
         </div>
         {/* BUG-06 FIX: Export All tombol dengan handler nyata */}
         <Button variant="outline" onClick={handleExportAll}>
@@ -120,11 +120,11 @@ export default function Reports() {
         <TabsList>
           <TabsTrigger value="sales">
             <TrendingUp className="mr-2 h-4 w-4" />
-            Sales Report
+            Laporan Penjualan
           </TabsTrigger>
           <TabsTrigger value="inventory">
             <Package className="mr-2 h-4 w-4" />
-            Inventory Report
+            Laporan Inventori
           </TabsTrigger>
         </TabsList>
 
@@ -221,15 +221,15 @@ export default function Reports() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Recent Orders</CardTitle>
+              <CardTitle>Pesanan Terbaru</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b">
-                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Order ID</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Date</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">No. Pesanan</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Tanggal</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
                       <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Total</th>
                     </tr>
@@ -239,7 +239,7 @@ export default function Reports() {
                       <tr key={order.id} className="border-b hover:bg-muted/50">
                         <td className="py-3 px-4">#{order.order_number || order.id.slice(0, 8)}</td>
                         <td className="py-3 px-4 text-muted-foreground">
-                          {order.created_at ? format(new Date(order.created_at), 'MMM dd, yyyy') : '-'}
+                          {order.created_at ? format(new Date(order.created_at), 'dd MMM yyyy') : '-'}
                         </td>
                         <td className="py-3 px-4 capitalize">{order.status}</td>
                         <td className="py-3 px-4 text-right font-medium">{formatCurrency(order.total)}</td>
@@ -314,7 +314,7 @@ export default function Reports() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Inventory Status</CardTitle>
+              <CardTitle>Status Inventori</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
