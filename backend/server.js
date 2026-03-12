@@ -472,21 +472,59 @@ app.patch('/api/admin/stores/:id/tier', auth, requireRole(['admin']), async (req
 
 app.get('/api/suppliers', auth, requireRole(['admin','staff']), async (req, res) => {
   try {
-    const { search, status, page = 1, limit = 20 } = req.query;
+    const { search, status, page = 1, limit = 50 } = req.query;
+
+    // Primary: get from v_stores_full (customers with store profile)
     let q = supabase.from('v_stores_full').select('*', { count: 'exact' });
     if (status) q = q.eq('status', status);
     if (search) q = q.or(`store_name.ilike.%${search}%,owner_name.ilike.%${search}%,email.ilike.%${search}%`);
-    const offset = (page - 1) * limit;
-    const { data, count, error } = await q.range(offset, offset + limit - 1).order('created_at', { ascending: false });
+    const { data: storeData, count, error } = await q.order('created_at', { ascending: false });
     if (error) throw error;
-    // Map to old shape for frontend compatibility
-    const suppliers = (data || []).map(s => ({
+
+    const storeUserIds = new Set((storeData || []).map(s => s.user_id).filter(Boolean));
+
+    // Secondary: get customer users who don't have a store profile yet
+    let q2 = supabase.from('users').select('id,email,name,company_name,phone,status,created_at')
+      .eq('role', 'customer');
+    if (search) q2 = q2.or(`name.ilike.%${search}%,email.ilike.%${search}%,company_name.ilike.%${search}%`);
+    const { data: usersData } = await q2.order('created_at', { ascending: false });
+    
+    // Merge: users without store profile
+    const extraUsers = (usersData || [])
+      .filter(u => !storeUserIds.has(u.id))
+      .map(u => ({
+        id: u.id,
+        user_id: u.id,
+        store_name: u.company_name || u.name,
+        owner_name: u.name,
+        email: u.email,
+        phone: u.phone,
+        status: u.status || 'active',
+        tier: 'bronze',
+        credit_limit: 0,
+        credit_used: 0,
+        created_at: u.created_at,
+        company_name: u.company_name || u.name,
+        current_credit: 0,
+        address: null,
+      }));
+
+    const storeSuppliers = (storeData || []).map(s => ({
       ...s,
-      company_name: s.store_name,
-      current_credit: s.credit_used,
+      name: s.owner_name || s.user_name || s.email || 'Unknown',
+      company_name: s.store_name || s.owner_name,
+      phone: s.whatsapp || s.phone_store,
+      current_credit: s.credit_used || 0,
       address: s.address_line,
+      status: s.status || 'draft',
     }));
-    res.json({ suppliers, total: count });
+
+    // If status filter applied, don't add extra users (they don't have status yet)
+    const suppliers = status ? storeSuppliers : [...storeSuppliers, ...extraUsers];
+    // Sort by created_at desc
+    suppliers.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    
+    res.json({ suppliers, total: suppliers.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -556,6 +594,58 @@ app.patch('/api/suppliers/:id/credit', auth, requireRole(['admin']), async (req,
       .select()
       .single();
     res.json({ supplier: { ...data, company_name: data.store_name, current_credit: data.credit_used } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════
+// PUBLIC ENDPOINTS (no auth)
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/products/public', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('id, name, sku, image_url, is_featured, price_tiers(tier, price_per_karton)')
+      .eq('is_active', true)
+      .order('is_featured', { ascending: false })
+      .limit(8);
+    if (error) throw error;
+    const products = (data || []).map(p => {
+      const bronze = p.price_tiers?.find(t => t.tier === 'bronze');
+      return { ...p, price: bronze?.price_per_karton || null, price_tiers: undefined };
+    });
+    res.json({ products });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/categories/public', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('id, name, slug, image_url')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .limit(12);
+    if (error) throw error;
+    // Count products per category
+    const catIds = (data || []).map(c => c.id);
+    const counts: Record<string, number> = {};
+    if (catIds.length > 0) {
+      const { data: countData } = await supabase
+        .from('products')
+        .select('category_id')
+        .eq('is_active', true)
+        .in('category_id', catIds);
+      (countData || []).forEach(p => {
+        if (p.category_id) counts[p.category_id] = (counts[p.category_id] || 0) + 1;
+      });
+    }
+    const categories = (data || []).map(c => ({ ...c, product_count: counts[c.id] || 0 }));
+    res.json({ categories });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -783,7 +873,12 @@ app.get('/api/inventory', auth, requireRole(['admin','staff']), async (req, res)
     if (error) throw error;
     // Add legacy field
     const inventory = (data || []).map(p => ({ ...p, stock_quantity: p.stock_karton }));
-    res.json({ products: inventory, inventory });
+    const summary = {
+      total: inventory.length,
+      lowStock: inventory.filter(p => p.stock_karton <= p.reorder_level && p.stock_karton > 0).length,
+      outOfStock: inventory.filter(p => p.stock_karton === 0).length,
+    };
+    res.json({ products: inventory, inventory, summary });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1415,7 +1510,7 @@ app.get('/api/reports/inventory', auth, requireRole(['admin','staff']), async (r
       totalProducts: products?.length || 0,
       lowStock: products?.filter(p => p.stock_karton <= p.reorder_level && p.stock_karton > 0).length || 0,
       outOfStock: products?.filter(p => p.stock_karton === 0).length || 0,
-      totalValueKarton: products?.reduce((s, p) => s + p.stock_karton, 0) || 0,
+      totalValue: products?.reduce((s, p) => s + (p.price_tiers?.[0]?.price_per_karton || 0) * (p.stock_karton || 0), 0) || 0,
     };
 
     res.json({ products: products || [], summary });
@@ -1528,7 +1623,14 @@ app.get('/api/settings', auth, requireRole(['admin']), async (req, res) => {
 // Public endpoint — hanya expose setting non-sensitif (ppn_rate, dll)
 app.get('/api/settings/public', async (req, res) => {
   try {
-    const PUBLIC_KEYS = ['ppn_rate', 'app_name', 'min_order'];
+    const PUBLIC_KEYS = [
+      'ppn_rate', 'app_name', 'min_order',
+      'landing_hero_title', 'landing_hero_subtitle', 'landing_hero_badge',
+      'landing_stats_products', 'landing_stats_customers', 'landing_stats_rating',
+      'landing_about_title', 'landing_about_desc', 'landing_about_year',
+      'landing_contact_phone', 'landing_contact_email', 'landing_contact_address',
+      'landing_contact_city', 'landing_promo_badge',
+    ];
     const { data } = await supabase.from('settings').select('*').in('key', PUBLIC_KEYS);
     res.json({ settings: Object.fromEntries((data || []).map(s => [s.key, s.value])) });
   } catch (e) {
