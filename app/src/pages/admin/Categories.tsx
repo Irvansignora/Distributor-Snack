@@ -104,7 +104,7 @@ export default function Categories() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {data?.categories.map((category) => (
+        {data?.categories?.map((category) => (
           <Card key={category.id}>
             <CardContent className="p-6">
               <div className="flex items-start justify-between">
