@@ -92,7 +92,7 @@ export default function Payments() {
                 </tr>
               </thead>
               <tbody>
-                {data?.payments.length === 0 ? (
+                {data?.payments?.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-12 text-center">
                       <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -100,7 +100,7 @@ export default function Payments() {
                     </td>
                   </tr>
                 ) : (
-                  data?.payments.map((payment) => (
+                  data?.payments?.map((payment) => (
                     <tr key={payment.id} className="border-b hover:bg-muted/50">
                       <td className="py-3 px-4 font-medium">#{payment.id.slice(0, 8)}</td>
                       <td className="py-3 px-4">{payment.users?.company_name || payment.users?.name}</td>
