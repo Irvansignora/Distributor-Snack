@@ -492,6 +492,38 @@ app.get('/api/suppliers', auth, requireRole(['admin','staff']), async (req, res)
   }
 });
 
+// BUG-08 FIX: Admin bisa tambah supplier/customer baru
+app.post('/api/suppliers', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { name, email, password, company_name, phone } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ error: 'name, email, dan password wajib diisi' });
+    if (password.length < 6) return res.status(400).json({ error: 'Password minimal 6 karakter' });
+
+    const { data: existing } = await supabase.from('users').select('id').eq('email', email).single();
+    if (existing) return res.status(409).json({ error: 'Email sudah terdaftar' });
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const { data: user, error } = await supabase.from('users')
+      .insert({ email, password: hashedPassword, name, phone, company_name, role: 'customer', status: 'active' })
+      .select('id,email,name,role,phone,company_name,status')
+      .single();
+    if (error) throw error;
+
+    // Auto-create store profile
+    await supabase.from('customer_stores').insert({
+      user_id: user.id,
+      store_name: company_name || name,
+      owner_name: name,
+      status: 'active',
+      tier: 'bronze',
+    });
+
+    res.status(201).json({ supplier: user });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/suppliers/:id', auth, requireRole(['admin','staff']), async (req, res) => {
   try {
     const { data: store } = await supabase.from('v_stores_full').select('*').eq('id', req.params.id).single();
@@ -819,7 +851,7 @@ app.get('/api/regions/cities', auth, async (req, res) => {
 
 app.get('/api/orders', auth, async (req, res) => {
   try {
-    const { status, payment_status, page = 1, limit = 20 } = req.query;
+    const { status, payment_status, page = 1, limit = 20, search } = req.query;
     let q = supabase.from('v_orders_summary').select('*', { count: 'exact' });
 
     if (req.user.role === 'customer') {
@@ -830,11 +862,13 @@ app.get('/api/orders', auth, async (req, res) => {
 
     if (status) q = q.eq('status', status);
     if (payment_status) q = q.eq('payment_status', payment_status);
+    // BUG-05 FIX: support search by order_number
+    if (search) q = q.ilike('order_number', `%${search}%`);
 
     const offset = (page - 1) * limit;
     const { data, count, error } = await q.range(offset, offset + limit - 1).order('created_at', { ascending: false });
     if (error) throw error;
-    res.json({ orders: data, total: count, pagination: { page: Number(page), limit: Number(limit), total: count } });
+    res.json({ orders: data, total: count, pagination: { page: Number(page), limit: Number(limit), total: count, totalPages: Math.ceil(count / limit) } });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1459,11 +1493,57 @@ app.get('/api/settings', auth, requireRole(['admin']), async (req, res) => {
   res.json({ settings: Object.fromEntries((data || []).map(s => [s.key, s.value])) });
 });
 
+// Public endpoint — hanya expose setting non-sensitif (ppn_rate, dll)
+app.get('/api/settings/public', async (req, res) => {
+  try {
+    const PUBLIC_KEYS = ['ppn_rate', 'app_name', 'min_order'];
+    const { data } = await supabase.from('settings').select('*').in('key', PUBLIC_KEYS);
+    res.json({ settings: Object.fromEntries((data || []).map(s => [s.key, s.value])) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.patch('/api/settings/:key', auth, requireRole(['admin']), async (req, res) => {
   const { data } = await supabase.from('settings')
     .upsert({ key: req.params.key, value: req.body.value, updated_by: req.user.id }, { onConflict: 'key' })
     .select().single();
   res.json({ setting: data });
+});
+
+// Update profile (admin/staff/customer)
+app.put('/api/auth/profile', auth, async (req, res) => {
+  try {
+    const allowed = ['name', 'phone', 'company_name', 'address'];
+    const updates = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid fields to update' });
+    const { data: user, error } = await supabase.from('users').update(updates).eq('id', req.user.id).select('id,email,name,role,phone,company_name,address,status').single();
+    if (error) throw error;
+    res.json({ user });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Change password
+app.put('/api/auth/change-password', auth, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password) return res.status(400).json({ error: 'current_password dan new_password wajib diisi' });
+    if (new_password.length < 6) return res.status(400).json({ error: 'Password minimal 6 karakter' });
+
+    const { data: user } = await supabase.from('users').select('password').eq('id', req.user.id).single();
+    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+
+    const valid = await bcrypt.compare(current_password, user.password);
+    if (!valid) return res.status(401).json({ error: 'Password lama tidak benar' });
+
+    const hashed = await bcrypt.hash(new_password, 12);
+    await supabase.from('users').update({ password: hashed }).eq('id', req.user.id);
+    res.json({ message: 'Password berhasil diubah' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ════════════════════════════════════════════════════════════════
