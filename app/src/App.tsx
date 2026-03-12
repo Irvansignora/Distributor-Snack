@@ -5,6 +5,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { TaxProvider } from '@/contexts/TaxContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 import Login from '@/pages/auth/Login';
 import Register from '@/pages/auth/Register';
@@ -20,6 +21,9 @@ import StoreManagement from '@/pages/admin/StoreManagement';
 import Payments from '@/pages/admin/Payments';
 import Reports from '@/pages/admin/Reports';
 import Settings from '@/pages/admin/Settings';
+import LandingSettings from '@/pages/admin/LandingSettings';
+import Suppliers from '@/pages/admin/Suppliers';
+import SupplierDetail from '@/pages/admin/SupplierDetail';
 
 import SupplierLayout from '@/layouts/SupplierLayout';
 import SupplierDashboard from '@/pages/supplier/Dashboard';
@@ -49,7 +53,7 @@ function App() {
               <Route path="/register" element={<Register />} />
 
               {/* Admin */}
-              <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin','staff']}><AdminLayout /></ProtectedRoute>}>
+              <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin','staff']}><ErrorBoundary><AdminLayout /></ErrorBoundary></ProtectedRoute>}>
                 <Route index element={<AdminDashboard />} />
                 <Route path="dashboard" element={<AdminDashboard />} />
                 <Route path="products" element={<Products />} />
@@ -63,6 +67,9 @@ function App() {
                 <Route path="payments" element={<Payments />} />
                 <Route path="reports" element={<Reports />} />
                 <Route path="settings" element={<Settings />} />
+                <Route path="landing" element={<LandingSettings />} />
+                <Route path="suppliers" element={<Suppliers />} />
+                <Route path="suppliers/:id" element={<SupplierDetail />} />
               </Route>
 
               {/* Customer (formerly supplier) */}
