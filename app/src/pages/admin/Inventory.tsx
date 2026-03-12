@@ -59,7 +59,7 @@ export default function Inventory() {
     },
   });
 
-  const filteredProducts = data?.inventory.filter(p =>
+  const filteredProducts = data?.inventory?.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
     p.sku.toLowerCase().includes(search.toLowerCase())
   );
@@ -87,7 +87,7 @@ export default function Inventory() {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data?.summary.total || 0}</div>
+            <div className="text-2xl font-bold">{data?.summary?.total || 0}</div>
           </CardContent>
         </Card>
         <Card>
@@ -96,7 +96,7 @@ export default function Inventory() {
             <AlertTriangle className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-500">{data?.summary.lowStock || 0}</div>
+            <div className="text-2xl font-bold text-amber-500">{data?.summary?.lowStock || 0}</div>
           </CardContent>
         </Card>
         <Card>
@@ -105,7 +105,7 @@ export default function Inventory() {
             <Package className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">{data?.summary.outOfStock || 0}</div>
+            <div className="text-2xl font-bold text-destructive">{data?.summary?.outOfStock || 0}</div>
           </CardContent>
         </Card>
         <Card>
