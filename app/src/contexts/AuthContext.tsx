@@ -12,9 +12,16 @@ interface AuthContextType {
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   hasRole: (roles: string[]) => boolean;
+  updateUser: (updated: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// BUG-14 FIX: expose logout callback agar api.ts bisa trigger tanpa import circular
+let globalLogout: (() => void) | null = null;
+export function triggerLogout() {
+  globalLogout?.();
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -22,31 +29,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check for stored token and validate
     const initAuth = async () => {
       const token = localStorage.getItem('token');
       if (token) {
         try {
           const userData = await authService.getCurrentUser();
           setUser(userData.user);
-        } catch (error) {
+        } catch {
           localStorage.removeItem('token');
         }
       }
       setIsLoading(false);
     };
-
     initAuth();
   }, []);
 
+  // BUG-14 FIX: register global logout untuk dipakai api.ts interceptor
+  useEffect(() => {
+    globalLogout = () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('cart'); // BUG-10 FIX
+      setUser(null);
+      navigate('/login');
+    };
+    return () => { globalLogout = null; };
+  }, [navigate]);
+
+  // BUG-04 FIX: error di-throw ke caller (Login.tsx sudah punya catch)
   const login = async (credentials: LoginCredentials) => {
     setIsLoading(true);
     try {
       const response = await authService.login(credentials);
       localStorage.setItem('token', response.token);
       setUser(response.user);
-      
-      // Redirect based on role
+
       if (response.user.role === 'admin' || response.user.role === 'staff') {
         navigate('/admin/dashboard');
       } else if (response.user.role === 'supplier' || response.user.role === 'customer') {
@@ -63,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await authService.register(data);
       localStorage.setItem('token', response.token);
       setUser(response.user);
-      
+
       if (response.user.role === 'supplier' || response.user.role === 'customer') {
         navigate('/supplier/dashboard');
       }
@@ -72,14 +88,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // BUG-10 FIX: cart di-clear saat logout
   const logout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('cart');
     setUser(null);
     navigate('/login');
   };
 
   const hasRole = (roles: string[]) => {
     return user ? roles.includes(user.role) : false;
+  };
+
+  // BUG-09 FIX: helper untuk update user state setelah profile save
+  const updateUser = (updated: Partial<User>) => {
+    setUser(prev => prev ? { ...prev, ...updated } : prev);
   };
 
   return (
@@ -92,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         hasRole,
+        updateUser,
       }}
     >
       <CartProvider>
