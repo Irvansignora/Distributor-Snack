@@ -9,6 +9,7 @@ import {
   CreditCard,
   BarChart3,
   Settings,
+  Globe,
   ChevronLeft,
   ChevronRight,
   Warehouse,
@@ -29,6 +30,7 @@ const navItems = [
   { path: '/admin/payments', label: 'Pembayaran', icon: CreditCard },
   { path: '/admin/reports', label: 'Laporan', icon: BarChart3 },
   { path: '/admin/settings', label: 'Pengaturan', icon: Settings },
+  { path: '/admin/landing', label: 'Landing Page', icon: Globe },
 ];
 
 export function AdminSidebar() {
