@@ -15,20 +15,28 @@ import { toast } from 'sonner';
 export default function Checkout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { items, total, clearCart } = useCart();
+  const { items, clearCart } = useCart();
   const { user } = useAuth();
   const [shippingAddress, setShippingAddress] = useState(user?.address || '');
+
+  // BUG-01 FIX: ambil tax info yang dikirim dari Cart.tsx via location.state
   const notes = location.state?.notes || '';
+  const subtotal: number = location.state?.subtotal ?? items.reduce(
+    (sum, item) => sum + item.quantity * (item.product.wholesale_price || item.product.price), 0
+  );
+  const tax: number = location.state?.tax ?? 0;
+  const grandTotal: number = location.state?.grandTotal ?? subtotal;
+  const taxPercent: number = location.state?.taxPercent ?? 0;
 
   const createOrderMutation = useMutation({
     mutationFn: orderService.createOrder,
     onSuccess: () => {
-      toast.success('Order placed successfully!');
+      toast.success('Pesanan berhasil dibuat!');
       clearCart();
       navigate('/supplier/orders');
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || 'Failed to place order');
+      toast.error(error.response?.data?.error || 'Gagal membuat pesanan');
     },
   });
 
@@ -42,12 +50,18 @@ export default function Checkout() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (items.length === 0) {
-      toast.error('Your cart is empty');
+      toast.error('Keranjang belanja kosong');
       return;
     }
 
+    if (!shippingAddress.trim()) {
+      toast.error('Alamat pengiriman wajib diisi');
+      return;
+    }
+
+    // BUG-01 FIX: kirim tax ke backend agar tersimpan dengan benar
     createOrderMutation.mutate({
       items: items.map(item => ({
         product_id: item.product.id,
@@ -55,7 +69,7 @@ export default function Checkout() {
       })),
       payment_method: 'bank_transfer',
       notes,
-      shipping_address: shippingAddress ? { address: shippingAddress } : undefined,
+      shipping_address: { address: shippingAddress },
     });
   };
 
@@ -63,7 +77,7 @@ export default function Checkout() {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-4">
         <Package className="h-16 w-16 text-muted-foreground mb-4" />
-        <h1 className="text-2xl font-bold mb-2">Your cart is empty</h1>
+        <h1 className="text-2xl font-bold mb-2">Keranjang kosong</h1>
         <Button onClick={() => navigate('/supplier/catalog')}>
           Browse Catalog
         </Button>
@@ -79,7 +93,7 @@ export default function Checkout() {
         </Button>
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Checkout</h1>
-          <p className="text-muted-foreground">Review and place your order</p>
+          <p className="text-muted-foreground">Review dan konfirmasi pesanan Anda</p>
         </div>
       </div>
 
@@ -89,22 +103,20 @@ export default function Checkout() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <MapPin className="h-5 w-5" />
-                Shipping Address
+                Alamat Pengiriman
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="address">Delivery Address *</Label>
-                  <Textarea
-                    id="address"
-                    value={shippingAddress}
-                    onChange={(e) => setShippingAddress(e.target.value)}
-                    placeholder="Enter your complete delivery address"
-                    required
-                    rows={3}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="address">Alamat Lengkap *</Label>
+                <Textarea
+                  id="address"
+                  value={shippingAddress}
+                  onChange={(e) => setShippingAddress(e.target.value)}
+                  placeholder="Masukkan alamat pengiriman lengkap"
+                  required
+                  rows={3}
+                />
               </div>
             </CardContent>
           </Card>
@@ -113,14 +125,14 @@ export default function Checkout() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CreditCard className="h-5 w-5" />
-                Payment Method
+                Metode Pembayaran
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="p-4 border rounded-lg bg-muted/50">
-                <p className="font-medium">Bank Transfer</p>
+                <p className="font-medium">Transfer Bank</p>
                 <p className="text-sm text-muted-foreground">
-                  You will receive payment instructions after placing your order
+                  Instruksi pembayaran akan dikirim setelah pesanan dikonfirmasi
                 </p>
               </div>
             </CardContent>
@@ -128,7 +140,7 @@ export default function Checkout() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Order Items</CardTitle>
+              <CardTitle>Item Pesanan</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -161,54 +173,57 @@ export default function Checkout() {
           </Card>
         </div>
 
+        {/* BUG-01 FIX: tampilkan ringkasan dengan tax yang konsisten dari Cart */}
         <div className="lg:col-span-1">
           <Card className="sticky top-4">
             <CardHeader>
-              <CardTitle>Order Summary</CardTitle>
+              <CardTitle>Ringkasan Pesanan</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span>{formatCurrency(total)}</span>
+                  <span>{formatCurrency(subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-sm text-muted-foreground">
-                  <span>Ongkos kirim</span>
-                  <span>Dihitung saat checkout</span>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    PPN {taxPercent > 0 ? `(${taxPercent}%)` : ''}
+                  </span>
+                  <span>{formatCurrency(tax)}</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between font-bold text-lg">
-                  <span>Estimasi Total</span>
-                  <span>{formatCurrency(total)}</span>
+                  <span>Total</span>
+                  <span>{formatCurrency(grandTotal)}</span>
                 </div>
               </div>
 
-              <Button 
-                type="submit" 
-                className="w-full" 
+              <Button
+                type="submit"
+                className="w-full"
                 size="lg"
                 disabled={createOrderMutation.isPending}
               >
                 {createOrderMutation.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Placing Order...
+                    Memproses...
                   </>
                 ) : (
                   <>
                     <CheckCircle className="mr-2 h-4 w-4" />
-                    Place Order
+                    Buat Pesanan
                   </>
                 )}
               </Button>
 
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 className="w-full"
                 onClick={() => navigate('/supplier/cart')}
               >
-                Back to Cart
+                Kembali ke Keranjang
               </Button>
             </CardContent>
           </Card>
