@@ -150,7 +150,7 @@ export default function Orders() {
                   <tr>
                     <td colSpan={7} className="py-8 text-center text-muted-foreground">Memuat...</td>
                   </tr>
-                ) : data?.orders.length === 0 ? (
+                ) : data?.orders?.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-12 text-center">
                       <ClipboardList className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -159,7 +159,7 @@ export default function Orders() {
                     </td>
                   </tr>
                 ) : (
-                  data?.orders.map((order) => (
+                  data?.orders?.map((order) => (
                     <tr key={order.id} className="border-b hover:bg-muted/50">
                       <td className="py-3 px-4">
                         <span className="font-medium">#{order.order_number || order.id.slice(0, 8)}</span>
@@ -202,7 +202,7 @@ export default function Orders() {
           </div>
 
           {/* Pagination */}
-          {data?.pagination && data.pagination.totalPages > 1 && (
+          {data?.pagination && data?.pagination?.totalPages > 1 && (
             <div className="flex justify-center gap-2 p-4 border-t">
               <Button
                 variant="outline"
