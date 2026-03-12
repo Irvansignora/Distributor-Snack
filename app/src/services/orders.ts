@@ -30,6 +30,7 @@ export const orderService = {
   async getOrders(params?: {
     status?: string;
     supplier_id?: string;
+    search?: string;
     page?: number;
     limit?: number;
   }): Promise<OrdersResponse> {
