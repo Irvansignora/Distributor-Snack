@@ -50,12 +50,12 @@ export default function Inventory() {
   const adjustMutation = useMutation({
     mutationFn: inventoryService.adjustStock,
     onSuccess: () => {
-      toast.success('Stock adjusted successfully');
+      toast.success('Stok berhasil disesuaikan');
       setAdjustDialogOpen(false);
       refetch();
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || 'Failed to adjust stock');
+      toast.error(error.response?.data?.error || 'Gagal menyesuaikan stok');
     },
   });
 
@@ -72,9 +72,9 @@ export default function Inventory() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Inventory</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Inventori</h1>
           <p className="text-muted-foreground">
-            Manage stock levels and track inventory movements
+            Kelola level stok dan pantau pergerakan inventori
           </p>
         </div>
       </div>
@@ -83,7 +83,7 @@ export default function Inventory() {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Products</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Produk</CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -92,7 +92,7 @@ export default function Inventory() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Low Stock</CardTitle>
+            <CardTitle className="text-sm font-medium">Stok Menipis</CardTitle>
             <AlertTriangle className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
@@ -101,7 +101,7 @@ export default function Inventory() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Out of Stock</CardTitle>
+            <CardTitle className="text-sm font-medium">Stok Habis</CardTitle>
             <Package className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
@@ -110,7 +110,7 @@ export default function Inventory() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Warehouses</CardTitle>
+            <CardTitle className="text-sm font-medium">Gudang</CardTitle>
             <Warehouse className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -125,7 +125,7 @@ export default function Inventory() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search products..."
+              placeholder="Cari produk..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10"
@@ -141,24 +141,24 @@ export default function Inventory() {
             <table className="w-full">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Product</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Produk</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">SKU</th>
-                  <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Stock</th>
-                  <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Reorder Level</th>
+                  <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Stok</th>
+                  <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Level Reorder</th>
                   <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
-                  <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Actions</th>
+                  <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Aksi</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-muted-foreground">Loading...</td>
+                    <td colSpan={6} className="py-8 text-center text-muted-foreground">Memuat...</td>
                   </tr>
                 ) : filteredProducts?.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-12 text-center">
                       <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <h3 className="text-lg font-medium mb-2">No products found</h3>
+                      <h3 className="text-lg font-medium mb-2">Produk tidak ditemukan</h3>
                     </td>
                   </tr>
                 ) : (
@@ -189,18 +189,18 @@ export default function Inventory() {
                         )}>
                           {product.stock_quantity}
                         </span>
-                        <span className="text-sm text-muted-foreground ml-1">{product.unit}</span>
+                        <span className="text-sm text-muted-foreground ml-1">{(product as any).unit_type || "karton"}</span>
                       </td>
                       <td className="py-3 px-4 text-center text-sm text-muted-foreground">
-                        {product.reorder_level} {product.unit}
+                        {product.reorder_level} {(product as any).unit_type || "karton"}
                       </td>
                       <td className="py-3 px-4 text-center">
                         {isOutOfStock(product) ? (
-                          <Badge variant="destructive">Out of Stock</Badge>
+                          <Badge variant="destructive">Stok Habis</Badge>
                         ) : isLowStock(product) ? (
-                          <Badge variant="secondary" className="bg-amber-500/10 text-amber-500">Low Stock</Badge>
+                          <Badge variant="secondary" className="bg-amber-500/10 text-amber-500">Stok Menipis</Badge>
                         ) : (
-                          <Badge variant="default" className="bg-emerald-500/10 text-emerald-500">In Stock</Badge>
+                          <Badge variant="default" className="bg-emerald-500/10 text-emerald-500">Tersedia</Badge>
                         )}
                       </td>
                       <td className="py-3 px-4">
@@ -288,14 +288,14 @@ function AdjustStockDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Adjust Stock</DialogTitle>
+          <DialogTitle>Sesuaikan Stok</DialogTitle>
           <DialogDescription>
-            {product && `Adjust stock for ${product.name}`}
+            {product && `Sesuaikan stok untuk ${product.name}`}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label>Adjustment Type</Label>
+            <Label>Tipe Penyesuaian</Label>
             <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
               <SelectTrigger>
                 <SelectValue />
@@ -304,26 +304,26 @@ function AdjustStockDialog({
                 <SelectItem value="incoming">
                   <div className="flex items-center gap-2">
                     <Plus className="h-4 w-4" />
-                    Incoming Stock
+                    Stok Masuk
                   </div>
                 </SelectItem>
                 <SelectItem value="outgoing">
                   <div className="flex items-center gap-2">
                     <Minus className="h-4 w-4" />
-                    Outgoing Stock
+                    Stok Keluar
                   </div>
                 </SelectItem>
                 <SelectItem value="adjustment">
                   <div className="flex items-center gap-2">
                     <RotateCcw className="h-4 w-4" />
-                    Adjustment
+                    Koreksi Manual
                   </div>
                 </SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Quantity</Label>
+            <Label>Jumlah</Label>
             <Input
               type="number"
               min="1"
@@ -333,20 +333,20 @@ function AdjustStockDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label>Reason</Label>
+            <Label>Keterangan</Label>
             <Textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Why are you adjusting this stock?"
+              placeholder="Alasan penyesuaian stok..."
               required
             />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              Batal
             </Button>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Adjusting...' : 'Adjust Stock'}
+              {isLoading ? 'Memproses...' : 'Sesuaikan Stok'}
             </Button>
           </DialogFooter>
         </form>
@@ -374,29 +374,29 @@ function StockHistoryDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Stock History</DialogTitle>
+          <DialogTitle>Riwayat Stok</DialogTitle>
           <DialogDescription>
-            {product && `Recent stock movements for ${product.name}`}
+            {product && `Riwayat pergerakan stok: ${product.name}`}
           </DialogDescription>
         </DialogHeader>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b">
-                <th className="text-left py-2 px-3 text-sm font-medium">Date</th>
-                <th className="text-left py-2 px-3 text-sm font-medium">Type</th>
-                <th className="text-right py-2 px-3 text-sm font-medium">Quantity</th>
-                <th className="text-left py-2 px-3 text-sm font-medium">Reason</th>
+                <th className="text-left py-2 px-3 text-sm font-medium">Tanggal</th>
+                <th className="text-left py-2 px-3 text-sm font-medium">Tipe</th>
+                <th className="text-right py-2 px-3 text-sm font-medium">Jumlah</th>
+                <th className="text-left py-2 px-3 text-sm font-medium">Keterangan</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center">Loading...</td>
+                  <td colSpan={4} className="py-4 text-center">Memuat...</td>
                 </tr>
               ) : historyData?.history.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-muted-foreground">No history found</td>
+                  <td colSpan={4} className="py-4 text-center text-muted-foreground">Belum ada riwayat</td>
                 </tr>
               ) : (
                 historyData?.history.map((h) => (
