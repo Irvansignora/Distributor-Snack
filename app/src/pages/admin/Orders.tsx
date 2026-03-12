@@ -86,14 +86,14 @@ export default function Orders() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Pesanan</h1>
           <p className="text-muted-foreground">
             Kelola dan pantau semua pesanan
           </p>
         </div>
         <Button variant="outline">
           <Download className="mr-2 h-4 w-4" />
-          Export
+          Ekspor
         </Button>
       </div>
 
@@ -136,26 +136,26 @@ export default function Orders() {
             <table className="w-full">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Order ID</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Supplier</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Date</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">No. Pesanan</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Pelanggan</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Tanggal</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Payment</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Pembayaran</th>
                   <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Total</th>
-                  <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Actions</th>
+                  <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Aksi</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-muted-foreground">Loading...</td>
+                    <td colSpan={7} className="py-8 text-center text-muted-foreground">Memuat...</td>
                   </tr>
                 ) : data?.orders.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-12 text-center">
                       <ClipboardList className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <h3 className="text-lg font-medium mb-2">No orders found</h3>
-                      <p className="text-muted-foreground">Orders will appear here when suppliers place them</p>
+                      <h3 className="text-lg font-medium mb-2">Belum ada pesanan</h3>
+                      <p className="text-muted-foreground">Pesanan akan muncul di sini saat pelanggan melakukan pembelian</p>
                     </td>
                   </tr>
                 ) : (
@@ -171,7 +171,7 @@ export default function Orders() {
                         </div>
                       </td>
                       <td className="py-3 px-4 text-sm text-muted-foreground">
-                        {order.created_at ? format(new Date(order.created_at), 'MMM dd, yyyy HH:mm') : '-'}
+                        {order.created_at ? format(new Date(order.created_at), 'dd MMM yyyy HH:mm') : '-'}
                       </td>
                       <td className="py-3 px-4">
                         <Badge className={cn(getStatusColor(order.status))}>
@@ -190,7 +190,7 @@ export default function Orders() {
                         <Button variant="ghost" size="sm" asChild>
                           <NavLink to={`/admin/orders/${order.id}`}>
                             <Eye className="h-4 w-4 mr-1" />
-                            View
+                            Lihat
                           </NavLink>
                         </Button>
                       </td>
@@ -210,10 +210,10 @@ export default function Orders() {
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
               >
-                Previous
+                Sebelumnya
               </Button>
               <span className="flex items-center px-4 text-sm text-muted-foreground">
-                Page {page} of {data.pagination.totalPages}
+                Halaman {page} dari {data.pagination.totalPages}
               </span>
               <Button
                 variant="outline"
@@ -221,7 +221,7 @@ export default function Orders() {
                 onClick={() => setPage(p => Math.min(data.pagination.totalPages, p + 1))}
                 disabled={page === data.pagination.totalPages}
               >
-                Next
+                Berikutnya
               </Button>
             </div>
           )}
