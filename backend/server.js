@@ -645,9 +645,12 @@ app.post('/api/products', auth, requireRole(['admin','staff']),
         productData.stock_karton = parseInt(productData.stock_quantity);
         delete productData.stock_quantity;
       }
-      if (productData.wholesale_price && !productData.price_per_karton) {
-        delete productData.wholesale_price; // handled via price_tiers
-      }
+      // Remove fields that don't exist in products table (price is in price_tiers)
+      delete productData.price;
+      delete productData.wholesale_price;
+      delete productData.price_per_karton;
+      delete productData.price_per_pack;
+      delete productData.price_per_pcs;
 
       if (req.file) {
         const publicId = `product_${Date.now()}`;
@@ -680,6 +683,12 @@ app.put('/api/products/:id', auth, requireRole(['admin','staff']), async (req, r
       productData.stock_karton = parseInt(productData.stock_quantity);
       delete productData.stock_quantity;
     }
+    // Remove fields that don't exist in products table (price is in price_tiers)
+    delete productData.price;
+    delete productData.wholesale_price;
+    delete productData.price_per_karton;
+    delete productData.price_per_pack;
+    delete productData.price_per_pcs;
 
     const { data: product, error } = await supabase.from('products').update(productData).eq('id', req.params.id).select().single();
     if (error) throw error;
