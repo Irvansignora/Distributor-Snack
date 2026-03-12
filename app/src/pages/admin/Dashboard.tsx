@@ -26,8 +26,8 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { format } from 'date-fns';
+import { id as idLocale } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-// ChartData type used implicitly through recharts
 
 function StatCard({ 
   title, 
@@ -79,6 +79,9 @@ function StatCard({
   );
 }
 
+const formatCurrency = (value: number | null | undefined) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value || 0);
+
 export default function AdminDashboard() {
   const [chartPeriod, setChartPeriod] = useState<'7d' | '30d'>('7d');
 
@@ -97,12 +100,16 @@ export default function AdminDashboard() {
     queryFn: () => orderService.getOrders({ limit: 5 }),
   });
 
-  const formatCurrency = (value: number | null | undefined) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(value || 0);
+  const getStatusLabel = (status: string) => {
+    const map: Record<string, string> = {
+      pending: 'Menunggu',
+      confirmed: 'Dikonfirmasi',
+      packing: 'Dikemas',
+      shipped: 'Dikirim',
+      completed: 'Selesai',
+      cancelled: 'Dibatalkan',
+    };
+    return map[status] || status;
   };
 
   return (
@@ -112,13 +119,13 @@ export default function AdminDashboard() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">
-            Welcome back! Here's what's happening with your business.
+            Selamat datang! Berikut ringkasan bisnis Anda hari ini.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm text-muted-foreground">
-            {format(new Date(), 'EEEE, MMMM do, yyyy')}
+            {format(new Date(), 'EEEE, dd MMMM yyyy', { locale: idLocale })}
           </span>
         </div>
       </div>
@@ -126,32 +133,28 @@ export default function AdminDashboard() {
       {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Today's Sales"
+          title="Penjualan Hari Ini"
           value={statsLoading ? '...' : formatCurrency(stats?.todaySales || 0)}
-          description="Total revenue today"
+          description="Total pendapatan hari ini"
           icon={Banknote}
-          trend="+12% from yesterday"
-          trendUp={true}
         />
         <StatCard
-          title="Today's Orders"
+          title="Pesanan Hari Ini"
           value={statsLoading ? '...' : (stats?.todayOrders || 0).toString()}
-          description="Orders received today"
+          description="Pesanan masuk hari ini"
           icon={ShoppingCart}
-          trend="+5% from yesterday"
-          trendUp={true}
         />
         <StatCard
-          title="Pending Orders"
+          title="Pesanan Pending"
           value={statsLoading ? '...' : (stats?.pendingOrders || 0).toString()}
-          description="Orders awaiting approval"
+          description="Menunggu konfirmasi"
           icon={Package}
           alert={stats?.pendingOrders ? stats.pendingOrders > 10 : false}
         />
         <StatCard
-          title="Low Stock Items"
+          title="Stok Menipis"
           value={statsLoading ? '...' : (stats?.lowStockCount || 0).toString()}
-          description="Products below reorder level"
+          description="Produk di bawah level reorder"
           icon={AlertTriangle}
           alert={stats?.lowStockCount ? stats.lowStockCount > 0 : false}
         />
@@ -163,8 +166,8 @@ export default function AdminDashboard() {
         <Card className="lg:col-span-5">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Sales Overview</CardTitle>
-              <CardDescription>Revenue trends over time</CardDescription>
+              <CardTitle>Grafik Penjualan</CardTitle>
+              <CardDescription>Tren pendapatan dari waktu ke waktu</CardDescription>
             </div>
             <div className="flex gap-2">
               <Button
@@ -172,14 +175,14 @@ export default function AdminDashboard() {
                 size="sm"
                 onClick={() => setChartPeriod('7d')}
               >
-                7 Days
+                7 Hari
               </Button>
               <Button
                 variant={chartPeriod === '30d' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setChartPeriod('30d')}
               >
-                30 Days
+                30 Hari
               </Button>
             </div>
           </CardHeader>
@@ -205,7 +208,7 @@ export default function AdminDashboard() {
                       tick={{ fontSize: 12 }}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(value) => `$${value}`}
+                      tickFormatter={(value) => `${(value/1000000).toFixed(0)}jt`}
                     />
                     <Tooltip 
                       contentStyle={{ 
@@ -213,7 +216,7 @@ export default function AdminDashboard() {
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px'
                       }}
-                      formatter={(value: number) => [formatCurrency(value), 'Sales']}
+                      formatter={(value: number) => [formatCurrency(value), 'Penjualan']}
                     />
                     <Area 
                       type="monotone" 
@@ -225,6 +228,11 @@ export default function AdminDashboard() {
                   </AreaChart>
                 </ResponsiveContainer>
               )}
+              {!chartLoading && (!chartData?.data || chartData.data.length === 0) && (
+                <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+                  Belum ada data penjualan
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -232,8 +240,8 @@ export default function AdminDashboard() {
         {/* Quick Stats */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Quick Stats</CardTitle>
-            <CardDescription>This month's performance</CardDescription>
+            <CardTitle>Ringkasan Bulan Ini</CardTitle>
+            <CardDescription>Performa bulan berjalan</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
@@ -242,7 +250,7 @@ export default function AdminDashboard() {
                   <Banknote className="h-4 w-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Monthly Revenue</p>
+                  <p className="text-sm font-medium">Pendapatan Bulan Ini</p>
                   <p className="text-xs text-muted-foreground">
                     {statsLoading ? '...' : formatCurrency(stats?.monthSales || 0)}
                   </p>
@@ -255,7 +263,7 @@ export default function AdminDashboard() {
                   <Users className="h-4 w-4 text-emerald-500" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Total Suppliers</p>
+                  <p className="text-sm font-medium">Total Pelanggan</p>
                   <p className="text-xs text-muted-foreground">
                     {statsLoading ? '...' : stats?.totalSuppliers || 0}
                   </p>
@@ -268,7 +276,7 @@ export default function AdminDashboard() {
                   <Package className="h-4 w-4 text-blue-500" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Total Products</p>
+                  <p className="text-sm font-medium">Total Produk</p>
                   <p className="text-xs text-muted-foreground">
                     {statsLoading ? '...' : stats?.totalProducts || 0}
                   </p>
@@ -283,12 +291,12 @@ export default function AdminDashboard() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Recent Orders</CardTitle>
-            <CardDescription>Latest orders from your suppliers</CardDescription>
+            <CardTitle>Pesanan Terbaru</CardTitle>
+            <CardDescription>Pesanan terakhir dari pelanggan Anda</CardDescription>
           </div>
           <Button variant="outline" size="sm" asChild>
             <a href="/admin/orders">
-              View All
+              Lihat Semua
               <ArrowRight className="ml-2 h-4 w-4" />
             </a>
           </Button>
@@ -298,9 +306,9 @@ export default function AdminDashboard() {
             <table className="w-full">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Order ID</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Supplier</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Date</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">No. Pesanan</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Pelanggan</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Tanggal</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
                   <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Total</th>
                 </tr>
@@ -308,11 +316,11 @@ export default function AdminDashboard() {
               <tbody>
                 {ordersLoading ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-muted-foreground">Loading...</td>
+                    <td colSpan={5} className="py-8 text-center text-muted-foreground">Memuat...</td>
                   </tr>
                 ) : recentOrders?.orders.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-muted-foreground">No orders yet</td>
+                    <td colSpan={5} className="py-8 text-center text-muted-foreground">Belum ada pesanan</td>
                   </tr>
                 ) : (
                   recentOrders?.orders.map((order) => (
@@ -320,7 +328,7 @@ export default function AdminDashboard() {
                       <td className="py-3 px-4 text-sm font-medium">#{order.order_number || order.id.slice(0, 8)}</td>
                       <td className="py-3 px-4 text-sm">{order.users?.company_name || order.users?.name}</td>
                       <td className="py-3 px-4 text-sm text-muted-foreground">
-                        {order.created_at ? format(new Date(order.created_at), 'MMM dd, yyyy') : '-'}
+                        {order.created_at ? format(new Date(order.created_at), 'dd MMM yyyy', { locale: idLocale }) : '-'}
                       </td>
                       <td className="py-3 px-4">
                         <Badge variant={
@@ -329,7 +337,7 @@ export default function AdminDashboard() {
                           order.status === 'cancelled' ? 'destructive' :
                           'outline'
                         }>
-                          {order.status}
+                          {getStatusLabel(order.status)}
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-sm text-right font-medium">
