@@ -97,12 +97,12 @@ export default function AdminDashboard() {
     queryFn: () => orderService.getOrders({ limit: 5 }),
   });
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = (value: number | null | undefined) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
-    }).format(value);
+    }).format(value || 0);
   };
 
   return (
@@ -333,7 +333,7 @@ export default function AdminDashboard() {
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-sm text-right font-medium">
-                        {formatCurrency(order.total)}
+                        {formatCurrency(order.total || 0)}
                       </td>
                     </tr>
                   ))
