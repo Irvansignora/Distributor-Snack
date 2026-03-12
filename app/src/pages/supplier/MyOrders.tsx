@@ -38,12 +38,12 @@ export default function MyOrders() {
     }),
   });
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = (value: number | null | undefined) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
-    }).format(value);
+    }).format(value || 0);
   };
 
   const getStatusIcon = (status: OrderStatus) => {
@@ -124,7 +124,7 @@ export default function MyOrders() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <p className="font-bold text-lg">{formatCurrency(order.total)}</p>
+                      <p className="font-bold text-lg">{formatCurrency(order.total || 0)}</p>
                       <p className="text-xs text-muted-foreground">
                         Payment: {order.payment_status}
                       </p>
