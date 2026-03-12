@@ -1,11 +1,21 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { NavLink } from 'react-router-dom';
 import { productService } from '@/services/products';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,17 +31,23 @@ import {
   Package,
   AlertTriangle,
   Filter,
-  Download
+  Download,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import type { Product } from '@/types';
 
 export default function Products() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [showLowStock, setShowLowStock] = useState(false);
+  // BUG-03 FIX: state untuk AlertDialog konfirmasi hapus
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { data, isLoading, refetch } = useQuery({
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery({
     queryKey: ['products', search, page, showLowStock],
     queryFn: () => productService.getProducts({
       search: search || undefined,
@@ -41,16 +57,19 @@ export default function Products() {
     }),
   });
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this product?')) {
-      try {
-        await productService.deleteProduct(id);
-        refetch();
-      } catch (error) {
-        alert('Failed to delete product');
-      }
-    }
-  };
+  // BUG-03 FIX: useMutation dengan loading state + toast + invalidateQueries
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => productService.deleteProduct(id),
+    onSuccess: () => {
+      toast.success('Produk berhasil dihapus');
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      setDeleteId(null);
+    },
+    onError: () => {
+      toast.error('Gagal menghapus produk');
+      setDeleteId(null);
+    },
+  });
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -149,7 +168,7 @@ export default function Products() {
               <ProductCard
                 key={product.id}
                 product={product}
-                onDelete={handleDelete}
+                onDelete={(id) => setDeleteId(id)}
                 formatCurrency={formatCurrency}
               />
             ))}
@@ -179,6 +198,30 @@ export default function Products() {
           )}
         </>
       )}
+
+      {/* BUG-03 FIX: AlertDialog konfirmasi hapus - tidak pakai window.confirm() */}
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Produk?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tindakan ini tidak dapat dibatalkan. Produk akan dihapus secara permanen dari katalog.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteId && deleteMutation.mutate(deleteId)}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menghapus...</>
+              ) : 'Hapus'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
