@@ -44,22 +44,20 @@ export default function Orders() {
   const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['orders', status, page, search],
+    queryKey: ['orders', status, page],
     queryFn: () => orderService.getOrders({
       status: status === 'all' ? undefined : status,
       page,
       limit: 10,
-      // BUG-05 FIX: kirim search ke API
-      supplier_id: search || undefined,
     }),
   });
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = (value: number | null | undefined) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
-    }).format(value);
+    }).format(value || 0);
   };
 
   const getStatusColor = (status: OrderStatus) => {
@@ -184,7 +182,7 @@ export default function Orders() {
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-right font-medium">
-                        {formatCurrency(order.total)}
+                        {formatCurrency(order.total || 0)}
                       </td>
                       <td className="py-3 px-4 text-center">
                         <Button variant="ghost" size="sm" asChild>
@@ -202,7 +200,7 @@ export default function Orders() {
           </div>
 
           {/* Pagination */}
-          {data?.pagination && data.pagination.totalPages > 1 && (
+          {data?.pagination && data?.pagination?.totalPages > 1 && (
             <div className="flex justify-center gap-2 p-4 border-t">
               <Button
                 variant="outline"
@@ -213,13 +211,13 @@ export default function Orders() {
                 Previous
               </Button>
               <span className="flex items-center px-4 text-sm text-muted-foreground">
-                Page {page} of {data.pagination.totalPages}
+                Page {page} of {data?.pagination?.totalPages}
               </span>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage(p => Math.min(data.pagination.totalPages, p + 1))}
-                disabled={page === data.pagination.totalPages}
+                onClick={() => setPage(p => Math.min(data?.pagination?.totalPages || 1, p + 1))}
+                disabled={page === data?.pagination?.totalPages}
               >
                 Next
               </Button>
