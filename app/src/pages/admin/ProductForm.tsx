@@ -148,7 +148,6 @@ export default function ProductForm() {
       if (value !== '') data.append(key, value);
     });
 
-    data.append('stock_quantity', formData.stock_karton);
 
     // Kirim price_tiers sebagai JSON
     data.append('price_tiers', JSON.stringify(
