@@ -37,6 +37,15 @@ import SupplierOrderDetail from '@/pages/supplier/OrderDetail';
 import Invoices from '@/pages/supplier/Invoices';
 import Profile from '@/pages/supplier/Profile';
 import LandingPage from '@/pages/LandingPage';
+import SalesmanLayout from '@/layouts/SalesmanLayout';
+import SalesmanDashboard from '@/pages/salesman/Dashboard';
+import SalesmanStores from '@/pages/salesman/Stores';
+import SalesmanStoreDetail from '@/pages/salesman/StoreDetail';
+import SalesmanOrders from '@/pages/salesman/Orders';
+import SalesmanNewOrder from '@/pages/salesman/NewOrder';
+import VehicleStock from '@/pages/salesman/VehicleStock';
+import SalesmanPerformance from '@/pages/salesman/Performance';
+import AdminSalesmen from '@/pages/admin/Salesmen';
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 5 * 60 * 1000, retry: 1 } } });
 
@@ -68,6 +77,7 @@ function App() {
                 <Route path="reports" element={<Reports />} />
                 <Route path="settings" element={<Settings />} />
                 <Route path="landing" element={<LandingSettings />} />
+                <Route path="salesmen" element={<AdminSalesmen />} />
                 <Route path="suppliers" element={<Suppliers />} />
                 <Route path="suppliers/:id" element={<SupplierDetail />} />
               </Route>
@@ -85,6 +95,18 @@ function App() {
                 <Route path="orders/:id" element={<SupplierOrderDetail />} />
                 <Route path="invoices" element={<Invoices />} />
                 <Route path="profile" element={<Profile />} />
+              </Route>
+
+              {/* Salesman */}
+              <Route path="/salesman" element={<ProtectedRoute allowedRoles={['salesman']}><SalesmanLayout /></ProtectedRoute>}>
+                <Route index element={<SalesmanDashboard />} />
+                <Route path="dashboard" element={<SalesmanDashboard />} />
+                <Route path="stores" element={<SalesmanStores />} />
+                <Route path="stores/:id" element={<SalesmanStoreDetail />} />
+                <Route path="orders" element={<SalesmanOrders />} />
+                <Route path="orders/new" element={<SalesmanNewOrder />} />
+                <Route path="vehicle" element={<VehicleStock />} />
+                <Route path="performance" element={<SalesmanPerformance />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
