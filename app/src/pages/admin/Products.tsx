@@ -238,6 +238,14 @@ function ProductCard({
   const isLowStock = product.stock_quantity <= product.reorder_level;
   const isOutOfStock = product.stock_quantity === 0;
 
+  // Ambil harga: pakai price (legacy) kalau ada, fallback ke price_tiers bronze
+  const TIER_ORDER = ['bronze', 'silver', 'gold', 'platinum'];
+  const displayPrice = product.price || (() => {
+    if (!product.price_tiers?.length) return 0;
+    const tier = TIER_ORDER.map(t => product.price_tiers?.find((pt: any) => pt.tier === t)).find(Boolean);
+    return tier?.price_per_karton || 0;
+  })();
+
   return (
     <Card className="overflow-hidden group">
       <div className="relative aspect-square bg-muted">
@@ -293,9 +301,9 @@ function ProductCard({
         </div>
         <div className="mt-3 flex items-center justify-between">
           <div>
-            <p className="text-lg font-bold">{formatCurrency(product.price)}</p>
+            <p className="text-lg font-bold">{formatCurrency(displayPrice)}</p>
             <p className="text-xs text-muted-foreground">
-              Grosir: {formatCurrency(product.wholesale_price || 0)}
+              Grosir: {formatCurrency(product.wholesale_price || displayPrice)}
             </p>
           </div>
           <div className="text-right">
