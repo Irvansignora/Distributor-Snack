@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { attendanceService, AttendanceRecord } from '@/services/attendance';
+import { attendanceService } from "@/services/attendance";
+import type { AttendanceRecord } from "@/services/attendance";
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
