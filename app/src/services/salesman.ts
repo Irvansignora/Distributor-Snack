@@ -207,4 +207,25 @@ export const adminSalesmanService = {
     const { data } = await api.delete(`/admin/salesmen/${id}`);
     return data;
   },
+
+  // ── Attendance ────────────────────────────────────────────
+  async getAttendanceToday() {
+    const { data } = await api.get('/attendance/today');
+    return data;
+  },
+
+  async getAttendanceHistory() {
+    const { data } = await api.get('/attendance/history');
+    return data;
+  },
+
+  async clockIn(payload: { latitude: number; longitude: number; address?: string; face_image_url?: string | null }) {
+    const { data } = await api.post('/attendance/clock-in', payload);
+    return data;
+  },
+
+  async clockOut(payload: { latitude: number; longitude: number; address?: string; face_image_url?: string | null }) {
+    const { data } = await api.put('/attendance/clock-out', payload);
+    return data;
+  },
 };
