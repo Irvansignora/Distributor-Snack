@@ -548,7 +548,7 @@ app.get('/api/suppliers', auth, requireRole(['admin','staff']), async (req, res)
     const storeUserIds = new Set((storeData || []).map(s => s.user_id).filter(Boolean));
 
     // Secondary: get customer users who don't have a store profile yet
-    let q2 = supabase.from('users').select('id,email,name,phone,status,created_at')
+    let q2 = supabase.from('users').select('id,email,name,phone,created_at')
       .eq('role', 'customer');
     if (search) q2 = q2.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
     const { data: usersData } = await q2.order('created_at', { ascending: false });
@@ -563,7 +563,7 @@ app.get('/api/suppliers', auth, requireRole(['admin','staff']), async (req, res)
         owner_name: u.name,
         email: u.email,
         phone: u.phone,
-        status: u.status || 'active',
+        status: 'active',
         tier: 'bronze',
         credit_limit: 0,
         credit_used: 0,
@@ -606,8 +606,8 @@ app.post('/api/suppliers', auth, requireRole(['admin']), async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 12);
     const { data: user, error } = await supabase.from('users')
-      .insert({ email, password: hashedPassword, name, phone, role: 'customer', status: 'active' })
-      .select('id,email,name,role,phone,status')
+      .insert({ email, password: hashedPassword, name, phone, role: 'customer' })
+      .select('id,email,name,role,phone')
       .single();
     if (error) throw error;
 
@@ -1734,7 +1734,7 @@ app.put('/api/auth/profile', auth, async (req, res) => {
     const allowed = ['name', 'phone', 'address'];
     const updates = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid fields to update' });
-    const { data: user, error } = await supabase.from('users').update(updates).eq('id', req.user.id).select('id,email,name,role,phone,address,status').single();
+    const { data: user, error } = await supabase.from('users').update(updates).eq('id', req.user.id).select('id,email,name,role,phone,address').single();
     if (error) throw error;
     res.json({ user });
   } catch (e) {
