@@ -19,15 +19,16 @@ import {
   Moon,
   LogOut,
   TrendingUp,
+  CalendarCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const bottomNavItems = [
-  { to: '/salesman/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/salesman/stores',    label: 'Toko',       icon: Store },
-  { to: '/salesman/orders',    label: 'Order',      icon: ClipboardList },
-  { to: '/salesman/vehicle',   label: 'Kendaraan',  icon: Truck },
-  { to: '/salesman/performance', label: 'Performa', icon: TrendingUp },
+  { to: '/salesman/dashboard',  label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/salesman/stores',     label: 'Toko',      icon: Store },
+  { to: '/salesman/attendance', label: 'Absen',     icon: CalendarCheck },
+  { to: '/salesman/orders',     label: 'Order',     icon: ClipboardList },
+  { to: '/salesman/vehicle',    label: 'Kendaraan', icon: Truck },
 ];
 
 export default function SalesmanLayout() {
