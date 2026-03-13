@@ -45,6 +45,7 @@ import SalesmanOrders from '@/pages/salesman/Orders';
 import SalesmanNewOrder from '@/pages/salesman/NewOrder';
 import VehicleStock from '@/pages/salesman/VehicleStock';
 import SalesmanPerformance from '@/pages/salesman/Performance';
+import SalesmanAttendance from '@/pages/salesman/Attendance';
 import AdminSalesmen from '@/pages/admin/Salesmen';
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 5 * 60 * 1000, retry: 1 } } });
@@ -107,6 +108,7 @@ function App() {
                 <Route path="orders/new" element={<SalesmanNewOrder />} />
                 <Route path="vehicle" element={<VehicleStock />} />
                 <Route path="performance" element={<SalesmanPerformance />} />
+                <Route path="attendance" element={<SalesmanAttendance />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
