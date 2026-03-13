@@ -181,25 +181,38 @@ app.post('/api/auth/register',
     try {
       const { email, password, name, phone, company_name } = req.body;
 
-      const { data: existing } = await supabase.from('users').select('id').eq('email', email).single();
+      // FIX-11a: normalize email
+      const normalizedEmail = email.toString().trim().toLowerCase();
+
+      // FIX-11b: fail fast jika JWT_SECRET tidak ada
+      if (!JWT_SECRET) {
+        console.error('FATAL: JWT_SECRET env variable is not set');
+        return res.status(500).json({ error: 'Konfigurasi server bermasalah, hubungi admin' });
+      }
+
+      // FIX-11c: cek duplikat dengan normalizedEmail
+      const { data: existing, error: checkError } = await supabase
+        .from('users').select('id').eq('email', normalizedEmail).single();
+      // PGRST116 = no rows found → berarti email belum terdaftar (oke)
+      if (checkError && checkError.code !== 'PGRST116') throw checkError;
       if (existing) return res.status(409).json({ error: 'Email sudah terdaftar' });
 
       const hashedPassword = await bcrypt.hash(password, 12);
       const { data: user, error } = await supabase
         .from('users')
-        .insert({ email, password: hashedPassword, name, phone, role: 'customer' })
+        .insert({ email: normalizedEmail, password: hashedPassword, name, phone, role: 'customer' })
         .select()
         .single();
       if (error) throw error;
 
       // Auto-create empty store profile
-      await supabase.from('customer_stores').insert({
+      const { data: store } = await supabase.from('customer_stores').insert({
         user_id: user.id,
         store_name: company_name || name,
         owner_name: name,
         status: 'draft',
         tier: 'bronze',
-      });
+      }).select().single();
 
       // Notify admins
       const { data: admins } = await supabase.from('users').select('id').eq('role', 'admin');
@@ -209,7 +222,12 @@ app.post('/api/auth/register',
       }
 
       const token = jwt.sign({ id: user.id, userId: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-      res.status(201).json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
+      // FIX-11d: sertakan store dalam response (sama seperti login)
+      res.status(201).json({
+        token,
+        user: { id: user.id, email: user.email, name: user.name, role: user.role },
+        store: store || null,
+      });
     } catch (e) {
       console.error('Register error:', e);
       res.status(500).json({ error: e.message || 'Registration failed' });
@@ -224,16 +242,34 @@ app.post('/api/auth/login', async (req, res) => {
     if (!email || !password)
       return res.status(400).json({ error: 'Email dan password wajib diisi' });
 
+    // FIX-10a: normalize email (lowercase + trim) agar tidak case-sensitive
+    const normalizedEmail = email.toString().trim().toLowerCase();
+
+    // FIX-10b: pastikan JWT_SECRET ada sebelum query DB (fail fast)
+    if (!JWT_SECRET) {
+      console.error('FATAL: JWT_SECRET env variable is not set');
+      return res.status(500).json({ error: 'Konfigurasi server bermasalah, hubungi admin' });
+    }
+
     const { data: user, error: dbError } = await supabase
-      .from('users').select('*').eq('email', email).single();
+      .from('users').select('*').eq('email', normalizedEmail).single();
 
     if (dbError) {
+      // FIX-10c: PGRST116 = "no rows returned" — artinya email tidak ada (bukan error DB)
+      if (dbError.code === 'PGRST116') {
+        return res.status(401).json({ error: 'Email tidak terdaftar' });
+      }
       console.error('Login DB error:', JSON.stringify(dbError));
       return res.status(500).json({ error: 'Gagal mengakses database: ' + dbError.message });
     }
 
     if (!user)
       return res.status(401).json({ error: 'Email tidak terdaftar' });
+
+    // FIX-10d: handle user yang passwordnya NULL (misal akun OAuth/SSO tanpa password)
+    if (!user.password) {
+      return res.status(401).json({ error: 'Akun ini tidak mendukung login dengan password' });
+    }
 
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch)
@@ -242,9 +278,10 @@ app.post('/api/auth/login', async (req, res) => {
     if (user.is_active === false)
       return res.status(403).json({ error: 'Akun dinonaktifkan, hubungi admin' });
 
-    await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
+    // update last_login async — jangan tunggu hasilnya agar tidak block response
+    supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id)
+      .then(() => {}).catch(e => console.warn('last_login update failed:', e.message));
 
-    if (!JWT_SECRET) throw new Error('JWT_SECRET env variable is not set');
     const token = jwt.sign(
       { id: user.id, userId: user.id, email: user.email, role: user.role },
       JWT_SECRET, { expiresIn: '7d' }
@@ -258,12 +295,12 @@ app.post('/api/auth/login', async (req, res) => {
 
     res.json({
       token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, company_name: user.name },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, company_name: user.company_name || user.name },
       store,
     });
   } catch (e) {
     console.error('Login error:', e);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: 'Login gagal: ' + (e.message || 'unknown error') });
   }
 });
 
@@ -275,7 +312,11 @@ app.post('/api/auth/reset-password', async (req, res) => {
     if (!email || !new_password) return res.status(400).json({ error: 'Email dan password baru wajib diisi' });
     if (new_password.length < 6) return res.status(400).json({ error: 'Password minimal 6 karakter' });
 
-    const { data: user } = await supabase.from('users').select('id').eq('email', email).single();
+    // FIX-12: normalize email + handle PGRST116 correctly
+    const normalizedEmail = email.toString().trim().toLowerCase();
+    const { data: user, error: findError } = await supabase
+      .from('users').select('id').eq('email', normalizedEmail).single();
+    if (findError && findError.code !== 'PGRST116') throw findError;
     if (!user) return res.status(404).json({ error: 'Email tidak terdaftar' });
 
     const hashed = await bcrypt.hash(new_password, 12);
