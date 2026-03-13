@@ -38,6 +38,9 @@ import {
   Banknote,
   Store,
   CheckCircle2,
+  UserPlus,
+  Pencil,
+  UserX,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -66,6 +69,8 @@ export default function AdminSalesmen() {
     notes: '',
   });
   const [assignForm, setAssignForm] = useState({ store_id: '', salesman_id: '' });
+  const [salesmanDialog, setSalesmanDialog] = useState<{ mode: 'create' | 'edit'; id?: string; name?: string } | null>(null);
+  const [salesmanForm, setSalesmanForm] = useState({ name: '', email: '', password: '', phone: '' });
 
   const qc = useQueryClient();
 
@@ -114,6 +119,40 @@ export default function AdminSalesmen() {
     onError: (e: any) => toast.error(e.response?.data?.error || 'Gagal assign toko'),
   });
 
+  const createSalesmanMutation = useMutation({
+    mutationFn: () => adminSalesmanService.createSalesman(salesmanForm),
+    onSuccess: () => {
+      toast.success('Akun salesman berhasil dibuat');
+      setSalesmanDialog(null);
+      setSalesmanForm({ name: '', email: '', password: '', phone: '' });
+      qc.invalidateQueries({ queryKey: ['admin-salesmen'] });
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error || 'Gagal membuat akun'),
+  });
+
+  const updateSalesmanMutation = useMutation({
+    mutationFn: () => adminSalesmanService.updateSalesman(salesmanDialog!.id!, {
+      name: salesmanForm.name,
+      phone: salesmanForm.phone,
+      ...(salesmanForm.password ? { password: salesmanForm.password } : {}),
+    }),
+    onSuccess: () => {
+      toast.success('Akun salesman berhasil diperbarui');
+      setSalesmanDialog(null);
+      qc.invalidateQueries({ queryKey: ['admin-salesmen'] });
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error || 'Gagal memperbarui akun'),
+  });
+
+  const deactivateMutation = useMutation({
+    mutationFn: (id: string) => adminSalesmanService.deleteSalesman(id),
+    onSuccess: () => {
+      toast.success('Akun salesman dinonaktifkan');
+      qc.invalidateQueries({ queryKey: ['admin-salesmen'] });
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error || 'Gagal menonaktifkan'),
+  });
+
   const salesmen = salesmenData?.salesmen || [];
   const stores = storesData?.suppliers || [];
   const visits = visitsData?.visits || [];
@@ -129,6 +168,13 @@ export default function AdminSalesmen() {
           <Button variant="outline" onClick={() => setAssignDialog(true)}>
             <Store className="mr-2 h-4 w-4" />
             Assign Toko
+          </Button>
+          <Button onClick={() => {
+            setSalesmanForm({ name: '', email: '', password: '', phone: '' });
+            setSalesmanDialog({ mode: 'create' });
+          }}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Tambah Salesman
           </Button>
         </div>
       </div>
@@ -178,14 +224,23 @@ export default function AdminSalesmen() {
                             <p className="text-xs text-muted-foreground">{sm.email}</p>
                           </div>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => setTargetDialog({ salesman_id: sm.id, name: sm.name })}
-                        >
-                          <Settings2 className="h-4 w-4" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8"
+                            onClick={() => {
+                              setSalesmanForm({ name: sm.name, email: sm.email, phone: sm.phone || '', password: '' });
+                              setSalesmanDialog({ mode: 'edit', id: sm.id, name: sm.name });
+                            }}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8"
+                            onClick={() => setTargetDialog({ salesman_id: sm.id, name: sm.name })}>
+                            <Settings2 className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => { if (confirm(`Nonaktifkan akun ${sm.name}?`)) deactivateMutation.mutate(sm.id); }}>
+                            <UserX className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
 
                       {a ? (
@@ -359,6 +414,61 @@ export default function AdminSalesmen() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Create / Edit Salesman Dialog */}
+      <Dialog open={!!salesmanDialog} onOpenChange={(o) => !o && setSalesmanDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {salesmanDialog?.mode === 'create' ? 'Tambah Akun Salesman' : `Edit — ${salesmanDialog?.name}`}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Nama Lengkap *</Label>
+              <Input placeholder="e.g. Budi Santoso"
+                value={salesmanForm.name}
+                onChange={e => setSalesmanForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+            {salesmanDialog?.mode === 'create' && (
+              <div className="space-y-2">
+                <Label>Email *</Label>
+                <Input type="email" placeholder="salesman@email.com"
+                  value={salesmanForm.email}
+                  onChange={e => setSalesmanForm(f => ({ ...f, email: e.target.value }))} />
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>No. HP / WhatsApp</Label>
+              <Input placeholder="08xxxxxxxxxx"
+                value={salesmanForm.phone}
+                onChange={e => setSalesmanForm(f => ({ ...f, phone: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>{salesmanDialog?.mode === 'create' ? 'Password *' : 'Password Baru (kosongkan jika tidak diganti)'}</Label>
+              <Input type="password" placeholder="Min. 6 karakter"
+                value={salesmanForm.password}
+                onChange={e => setSalesmanForm(f => ({ ...f, password: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSalesmanDialog(null)}>Batal</Button>
+            <Button
+              onClick={() => salesmanDialog?.mode === 'create' ? createSalesmanMutation.mutate() : updateSalesmanMutation.mutate()}
+              disabled={
+                createSalesmanMutation.isPending || updateSalesmanMutation.isPending ||
+                !salesmanForm.name ||
+                (salesmanDialog?.mode === 'create' && (!salesmanForm.email || !salesmanForm.password))
+              }
+            >
+              {(createSalesmanMutation.isPending || updateSalesmanMutation.isPending)
+                ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                : <CheckCircle2 className="mr-2 h-4 w-4" />}
+              {salesmanDialog?.mode === 'create' ? 'Buat Akun' : 'Simpan'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Set Target Dialog */}
       <Dialog open={!!targetDialog} onOpenChange={(o) => !o && setTargetDialog(null)}>
