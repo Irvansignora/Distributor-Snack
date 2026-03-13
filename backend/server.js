@@ -2217,6 +2217,64 @@ app.get('/api/admin/salesmen', auth, requireRole(['admin','staff']), async (req,
   }
 });
 
+
+// ── Admin: tambah akun salesman baru ──────────────────────────
+app.post('/api/admin/salesmen', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { name, email, password, phone } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ error: 'name, email, dan password wajib diisi' });
+    if (password.length < 6) return res.status(400).json({ error: 'Password minimal 6 karakter' });
+
+    const normalizedEmail = email.toString().trim().toLowerCase();
+    const { data: existing } = await supabase.from('users').select('id').eq('email', normalizedEmail).single().catch(() => ({ data: null }));
+    if (existing) return res.status(409).json({ error: 'Email sudah terdaftar' });
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const { data: user, error } = await supabase.from('users')
+      .insert({ email: normalizedEmail, password: hashedPassword, name, phone, role: 'salesman', is_active: true })
+      .select('id, email, name, phone, role, created_at')
+      .single();
+    if (error) throw error;
+
+    res.status(201).json({ salesman: user, message: 'Akun salesman berhasil dibuat' });
+  } catch (e) {
+    console.error('Create salesman error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Admin: edit akun salesman ──────────────────────────────────
+app.put('/api/admin/salesmen/:id', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { name, phone, password, is_active } = req.body;
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (phone !== undefined) updates.phone = phone;
+    if (is_active !== undefined) updates.is_active = is_active;
+    if (password) {
+      if (password.length < 6) return res.status(400).json({ error: 'Password minimal 6 karakter' });
+      updates.password = await bcrypt.hash(password, 12);
+    }
+    const { data: user, error } = await supabase.from('users')
+      .update(updates).eq('id', req.params.id).eq('role', 'salesman')
+      .select('id, email, name, phone, role, is_active, created_at').single();
+    if (error) throw error;
+    res.json({ salesman: user, message: 'Akun salesman berhasil diperbarui' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Admin: nonaktifkan/hapus akun salesman ─────────────────────
+app.delete('/api/admin/salesmen/:id', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    await supabase.from('users').update({ is_active: false }).eq('id', req.params.id).eq('role', 'salesman');
+    res.json({ message: 'Akun salesman dinonaktifkan' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Admin: buat/edit target salesman ──────────────────────────
 app.post('/api/admin/salesman-targets', auth, requireRole(['admin','staff']), async (req, res) => {
   try {
