@@ -44,6 +44,23 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Explicit OPTIONS handler for preflight requests
+app.options('*', (req, res) => {
+  const origin = req.headers.origin;
+  if (
+    !origin ||
+    allowedOrigins.includes(origin) ||
+    /^https:\/\/.*\.vercel\.app$/.test(origin)
+  ) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Max-Age', '86400');
+  }
+  res.status(204).end();
+});
+
 // Backend pakai service_role key agar bisa bypass RLS
 // JANGAN expose key ini ke frontend
 const supabase = createClient(
@@ -2217,6 +2234,12 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ SnackHub B2B API running on port ${PORT}`);
-});
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`✅ SnackHub B2B API running on port ${PORT}`);
+  });
+}
+
+// For Vercel serverless
+export default app;
