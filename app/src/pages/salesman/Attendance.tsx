@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { salesmanService } from '@/services/salesman';
+import { attendanceService, AttendanceRecord } from '@/services/attendance';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -19,21 +19,6 @@ import {
 // ────────────────────────────────────────────────────────────────
 // Types
 // ────────────────────────────────────────────────────────────────
-interface AttendanceRecord {
-  id: string;
-  date: string;
-  clock_in: string | null;
-  clock_out: string | null;
-  clock_in_lat: number | null;
-  clock_in_lng: number | null;
-  clock_in_address: string | null;
-  clock_in_photo: string | null;
-  clock_out_lat: number | null;
-  clock_out_lng: number | null;
-  clock_out_address: string | null;
-  clock_out_photo: string | null;
-  status: string;
-}
 
 interface GpsCoords {
   latitude: number;
@@ -203,13 +188,13 @@ export default function Attendance() {
   // ── Queries ────────────────────────────────────────────────
   const { data: todayData, isLoading: todayLoading } = useQuery({
     queryKey: ['attendance-today'],
-    queryFn: salesmanService.getAttendanceToday,
+    queryFn: attendanceService.getToday,
     refetchInterval: 30_000,
   });
 
   const { data: historyData } = useQuery({
     queryKey: ['attendance-history'],
-    queryFn: salesmanService.getAttendanceHistory,
+    queryFn: attendanceService.getHistory,
   });
 
   const attendance: AttendanceRecord | null = todayData?.attendance ?? null;
@@ -225,8 +210,8 @@ export default function Attendance() {
         address: coords.address,
         face_image_url: photo,   // in real app upload to cloudinary first; here pass base64 or null
       };
-      if (action === 'in') return salesmanService.clockIn(payload);
-      return salesmanService.clockOut(payload);
+      if (action === 'in') return attendanceService.clockIn(payload);
+      return attendanceService.clockOut(payload);
     },
     onSuccess: (res) => {
       toast.success(res.message ?? (action === 'in' ? 'Clock in berhasil!' : 'Clock out berhasil!'));
