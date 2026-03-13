@@ -16,6 +16,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  // FIX-06: isLoading dikelola hanya di sini, bukan double dengan AuthContext
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [errorCode, setErrorCode] = useState(0);
@@ -32,12 +33,29 @@ export default function Login() {
     e.preventDefault();
     setError('');
     setErrorCode(0);
+
+    // FIX-07: validasi dasar sebelum hit API
+    if (!email.trim()) {
+      setError('Email wajib diisi');
+      return;
+    }
+    if (!password) {
+      setError('Password wajib diisi');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      await login({ email, password });
+      await login({ email: email.trim().toLowerCase(), password });
+      // Navigasi ditangani di AuthContext.login(), tidak perlu di sini
     } catch (err: any) {
-      const msg = err.response?.data?.error || 'Gagal login, coba lagi';
-      const code = err.response?.status || 0;
+      // FIX-08: handle berbagai bentuk error response
+      const msg =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Gagal login, coba lagi';
+      const code = err?.response?.status || 0;
       setError(msg);
       setErrorCode(code);
     } finally {
@@ -49,22 +67,31 @@ export default function Login() {
     e.preventDefault();
     setResetError('');
     setResetMsg('');
+    if (!resetEmail.trim()) {
+      setResetError('Email wajib diisi');
+      return;
+    }
     if (newPassword.length < 6) {
       setResetError('Password minimal 6 karakter');
       return;
     }
     setResetLoading(true);
     try {
-      await api.post('/auth/reset-password', { email: resetEmail, new_password: newPassword });
+      await api.post('/auth/reset-password', {
+        email: resetEmail.trim().toLowerCase(),
+        new_password: newPassword,
+      });
       setResetMsg('Password berhasil diubah! Silakan login.');
-      setEmail(resetEmail);
+      setEmail(resetEmail.trim().toLowerCase());
       setPassword('');
       setTimeout(() => {
         setShowReset(false);
         setResetMsg('');
       }, 2000);
     } catch (err: any) {
-      setResetError(err.response?.data?.error || 'Gagal reset password');
+      setResetError(
+        err?.response?.data?.error || err?.message || 'Gagal reset password'
+      );
     } finally {
       setResetLoading(false);
     }
@@ -100,9 +127,13 @@ export default function Login() {
                 <Alert variant="destructive" className="mb-4">
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>
-                    {errorCode === 401 ? 'Login Gagal' :
-                     errorCode === 403 ? 'Akun Diblokir' :
-                     errorCode === 500 ? 'Error Server' : 'Error'}
+                    {errorCode === 401
+                      ? 'Login Gagal'
+                      : errorCode === 403
+                      ? 'Akun Diblokir'
+                      : errorCode === 500
+                      ? 'Error Server'
+                      : 'Error'}
                   </AlertTitle>
                   <AlertDescription className="mt-1">
                     {error}
@@ -110,13 +141,24 @@ export default function Login() {
                       <button
                         type="button"
                         className="block mt-2 text-xs underline opacity-80 hover:opacity-100"
-                        onClick={() => { setShowReset(true); setResetEmail(email); }}
+                        onClick={() => {
+                          setShowReset(true);
+                          setResetEmail(email);
+                        }}
                       >
                         Lupa password? Ganti password di sini
                       </button>
                     )}
                     {errorCode === 500 && (
-                      <p className="mt-1 text-xs opacity-80">Coba lagi dalam beberapa detik. Jika masih gagal, hubungi admin.</p>
+                      <p className="mt-1 text-xs opacity-80">
+                        Coba lagi dalam beberapa detik. Jika masih gagal, hubungi admin.
+                      </p>
+                    )}
+                    {/* FIX-09: tampilkan hint jika network error (no status code) */}
+                    {errorCode === 0 && (
+                      <p className="mt-1 text-xs opacity-80">
+                        Periksa koneksi internet atau pastikan server sedang berjalan.
+                      </p>
                     )}
                   </AlertDescription>
                 </Alert>
@@ -133,6 +175,8 @@ export default function Login() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     disabled={isLoading}
+                    autoComplete="email"
+                    autoFocus
                   />
                 </div>
 
@@ -147,6 +191,7 @@ export default function Login() {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       disabled={isLoading}
+                      autoComplete="current-password"
                     />
                     <Button
                       type="button"
@@ -154,8 +199,13 @@ export default function Login() {
                       size="icon"
                       className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8"
                       onClick={() => setShowPassword(!showPassword)}
+                      tabIndex={-1}
                     >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -167,12 +217,17 @@ export default function Login() {
                       checked={rememberMe}
                       onCheckedChange={(checked) => setRememberMe(checked as boolean)}
                     />
-                    <Label htmlFor="remember" className="text-sm font-normal">Ingat saya</Label>
+                    <Label htmlFor="remember" className="text-sm font-normal">
+                      Ingat saya
+                    </Label>
                   </div>
                   <button
                     type="button"
                     className="text-sm text-primary hover:underline"
-                    onClick={() => { setShowReset(true); setResetEmail(email); }}
+                    onClick={() => {
+                      setShowReset(true);
+                      setResetEmail(email);
+                    }}
                   >
                     Lupa password?
                   </button>
@@ -180,8 +235,13 @@ export default function Login() {
 
                 <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Masuk...</>
-                  ) : 'Masuk'}
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Masuk...
+                    </>
+                  ) : (
+                    'Masuk'
+                  )}
                 </Button>
               </form>
             </CardContent>
@@ -228,6 +288,7 @@ export default function Login() {
                     onChange={(e) => setResetEmail(e.target.value)}
                     required
                     disabled={resetLoading}
+                    autoComplete="email"
                   />
                 </div>
                 <div className="space-y-2">
@@ -240,18 +301,29 @@ export default function Login() {
                     onChange={(e) => setNewPassword(e.target.value)}
                     required
                     disabled={resetLoading}
+                    minLength={6}
+                    autoComplete="new-password"
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={resetLoading}>
                   {resetLoading ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menyimpan...</>
-                  ) : 'Simpan Password Baru'}
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Menyimpan...
+                    </>
+                  ) : (
+                    'Simpan Password Baru'
+                  )}
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
                   className="w-full"
-                  onClick={() => { setShowReset(false); setResetError(''); setResetMsg(''); }}
+                  onClick={() => {
+                    setShowReset(false);
+                    setResetError('');
+                    setResetMsg('');
+                  }}
                 >
                   Kembali ke Login
                 </Button>
