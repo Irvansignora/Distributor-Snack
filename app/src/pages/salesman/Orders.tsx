@@ -3,13 +3,6 @@ import { NavLink } from 'react-router-dom';
 import { salesmanService } from '@/services/salesman';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Plus, ShoppingCart, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
