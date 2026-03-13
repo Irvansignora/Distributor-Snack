@@ -851,9 +851,16 @@ app.post('/api/products', auth, requireRole(['admin','staff']),
   }
 );
 
-app.put('/api/products/:id', auth, requireRole(['admin','staff']), async (req, res) => {
+app.put('/api/products/:id', auth, requireRole(['admin','staff']), upload.single('image'), async (req, res) => {
   try {
     const { price_tiers, ...productData } = req.body;
+
+    // Parse numeric fields (sama seperti POST)
+    if (productData.pcs_per_pack)    productData.pcs_per_pack    = parseInt(productData.pcs_per_pack);
+    if (productData.pack_per_karton) productData.pack_per_karton = parseInt(productData.pack_per_karton);
+    if (productData.stock_karton !== undefined) productData.stock_karton = parseInt(productData.stock_karton) || 0;
+    if (productData.reorder_level)   productData.reorder_level   = parseInt(productData.reorder_level);
+    if (productData.weight_gram)     productData.weight_gram     = parseInt(productData.weight_gram);
 
     // Handle legacy field names
     if (productData.stock_quantity !== undefined) {
@@ -867,6 +874,12 @@ app.put('/api/products/:id', auth, requireRole(['admin','staff']), async (req, r
     delete productData.price_per_pack;
     delete productData.price_per_pcs;
 
+    // Upload gambar baru jika ada
+    if (req.file) {
+      const publicId = `product_${req.params.id}`;
+      productData.image_url = await uploadProductImage(req.file.buffer, req.file.mimetype, publicId);
+    }
+
     const { data: product, error } = await supabase.from('products').update(productData).eq('id', req.params.id).select().single();
     if (error) throw error;
 
@@ -879,6 +892,7 @@ app.put('/api/products/:id', auth, requireRole(['admin','staff']), async (req, r
 
     res.json({ product });
   } catch (e) {
+    console.error('Update product error:', e);
     res.status(500).json({ error: e.message });
   }
 });
