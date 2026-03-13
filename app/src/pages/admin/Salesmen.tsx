@@ -32,7 +32,6 @@ import {
   TrendingUp,
   Target,
   MapPin,
-  Plus,
   Settings2,
   Loader2,
   ShoppingCart,
