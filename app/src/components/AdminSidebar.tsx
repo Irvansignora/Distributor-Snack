@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import {
+ useState } from 'react';
+ NavLink, useLocation } from 'react-router-dom';
+ useAuth } from '@/contexts/AuthContext';
+
   LayoutDashboard,
   Package,
   ClipboardList,
@@ -14,11 +14,12 @@ import {
   ChevronRight,
   Warehouse,
   Tags
+  TrendingUp,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+ cn } from '@/lib/utils';
+ Button } from '@/components/ui/button';
+ ScrollArea } from '@/components/ui/scroll-area';
+ Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 const navItems = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -27,6 +28,8 @@ const navItems = [
   { path: '/admin/inventory', label: 'Stok', icon: Warehouse },
   { path: '/admin/orders', label: 'Pesanan', icon: ClipboardList },
   { path: '/admin/stores', label: 'Pelanggan', icon: Users },
+  { path: '/admin/suppliers', label: 'Pelanggan Baru', icon: Users },
+  { path: '/admin/salesmen', label: 'Salesman', icon: TrendingUp },
   { path: '/admin/payments', label: 'Pembayaran', icon: CreditCard },
   { path: '/admin/reports', label: 'Laporan', icon: BarChart3 },
   { path: '/admin/settings', label: 'Pengaturan', icon: Settings },
