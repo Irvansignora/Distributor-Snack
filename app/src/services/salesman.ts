@@ -192,4 +192,19 @@ export const adminSalesmanService = {
     const { data } = await api.get('/admin/visits', { params });
     return data;
   },
+
+  async createSalesman(payload: { name: string; email: string; password: string; phone?: string }) {
+    const { data } = await api.post('/admin/salesmen', payload);
+    return data;
+  },
+
+  async updateSalesman(id: string, payload: { name?: string; phone?: string; password?: string; is_active?: boolean }) {
+    const { data } = await api.put(`/admin/salesmen/${id}`, payload);
+    return data;
+  },
+
+  async deleteSalesman(id: string) {
+    const { data } = await api.delete(`/admin/salesmen/${id}`);
+    return data;
+  },
 };
