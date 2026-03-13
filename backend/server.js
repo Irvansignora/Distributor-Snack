@@ -697,7 +697,7 @@ app.get('/api/categories/public', async (req, res) => {
     if (error) throw error;
     // Count products per category
     const catIds = (data || []).map(c => c.id);
-    const counts: Record<string, number> = {};
+    const counts = {};
     if (catIds.length > 0) {
       const { data: countData } = await supabase
         .from('products')
