@@ -65,6 +65,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (response.user.role === 'admin' || response.user.role === 'staff') {
         navigate('/admin/dashboard');
+      } else if (response.user.role === 'salesman') {
+        navigate('/salesman/dashboard');
       } else if (response.user.role === 'supplier' || response.user.role === 'customer') {
         navigate('/supplier/dashboard');
       }
