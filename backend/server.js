@@ -21,20 +21,18 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
-// Di Vercel serverless, OPTIONS preflight HARUS dijawab sebelum middleware lain.
-// Kalau ada error 500 (env kosong dll), preflight ikut 500 dan browser block login.
-// Solusi: set CORS headers di middleware PERTAMA, short-circuit OPTIONS langsung.
-// Tidak pakai package cors sebagai gatekeeper — cukup express middleware manual.
+// Approach: set headers UNCONDITIONALLY on every response, termasuk error responses.
+// Ini penting di Vercel karena serverless function bisa return error sebelum
+// Express middleware sempat jalan.
 
-function setCorsHeaders(req, res) {
-  const origin = req.headers.origin;
-  const allowed =
+function setCorsHeaders(res, origin) {
+  const isAllowed =
     !origin ||
     /^https?:\/\/localhost(:\d+)?$/.test(origin) ||
     /^https:\/\/[a-zA-Z0-9][a-zA-Z0-9-]*(\.[a-zA-Z0-9-]+)*\.vercel\.app$/.test(origin) ||
     origin === (process.env.FRONTEND_URL || '');
 
-  res.setHeader('Access-Control-Allow-Origin',      allowed ? (origin || '*') : 'null');
+  res.setHeader('Access-Control-Allow-Origin',      isAllowed ? (origin || '*') : 'https://distributor-snack.vercel.app');
   res.setHeader('Access-Control-Allow-Methods',     'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers',     'Content-Type,Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -42,10 +40,12 @@ function setCorsHeaders(req, res) {
   res.setHeader('Vary', 'Origin');
 }
 
-// Middleware #1: CORS + preflight — HARUS sebelum express.json() dan route lain
+// Middleware #1 — CORS, dipasang sebelum SEMUA middleware lain termasuk express.json()
 app.use((req, res, next) => {
-  setCorsHeaders(req, res);
-  if (req.method === 'OPTIONS') return res.status(204).end();
+  setCorsHeaders(res, req.headers.origin);
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end(); // 200 bukan 204 — lebih compatible dengan Vercel
+  }
   next();
 });
 
@@ -2257,13 +2257,14 @@ app.get('/api/admin/visits', auth, requireRole(['admin','staff']), async (req, r
   }
 });
 
-// ════════════════════════════════════════════════════════════════
-// ERROR HANDLER
-// ════════════════════════════════════════════════════════════════
-
+// Global error handler — HARUS set CORS headers juga di sini
+// karena Vercel bisa capture error SEBELUM response headers dikirim
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err.stack);
-  res.status(500).json({ error: 'Internal server error' });
+  setCorsHeaders(res, req.headers.origin);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // For local development
@@ -2273,5 +2274,5 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// For Vercel serverless
+// For Vercel serverless — ES Module default export
 export default app;
