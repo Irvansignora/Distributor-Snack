@@ -110,7 +110,7 @@ export default function AdminSalesmen() {
   });
 
   const assignMutation = useMutation({
-    mutationFn: () => adminSalesmanService.assignStore(assignForm.store_id, assignForm.salesman_id || null),
+    mutationFn: () => adminSalesmanService.assignStore(assignForm.store_id, assignForm.salesman_id === '__none__' ? null : assignForm.salesman_id || null),
     onSuccess: () => {
       toast.success('Toko berhasil di-assign');
       setAssignDialog(false);
@@ -566,7 +566,7 @@ export default function AdminSalesmen() {
               <Select value={assignForm.salesman_id} onValueChange={v => setAssignForm(f => ({ ...f, salesman_id: v }))}>
                 <SelectTrigger><SelectValue placeholder="Pilih salesman..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">— Tidak di-assign —</SelectItem>
+                  <SelectItem value="__none__">— Tidak di-assign —</SelectItem>
                   {salesmen.map((sm: any) => (
                     <SelectItem key={sm.id} value={sm.id}>{sm.name}</SelectItem>
                   ))}
