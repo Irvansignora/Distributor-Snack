@@ -2275,6 +2275,134 @@ app.delete('/api/admin/salesmen/:id', auth, requireRole(['admin']), async (req, 
   }
 });
 
+// ── Absensi Salesman ──────────────────────────────────────────
+
+// GET: status absen hari ini
+app.get('/api/attendance/today', auth, requireRole(['salesman']), async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data } = await supabase
+      .from('attendances')
+      .select('*')
+      .eq('salesman_id', req.user.id)
+      .eq('date', today)
+      .maybeSingle();
+    res.json({ attendance: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST: clock in
+app.post('/api/attendance/clock-in', auth, requireRole(['salesman']), async (req, res) => {
+  try {
+    const { latitude, longitude, face_image_url, address } = req.body;
+    if (!latitude || !longitude) return res.status(400).json({ error: 'GPS wajib diisi' });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: existing } = await supabase
+      .from('attendances')
+      .select('id')
+      .eq('salesman_id', req.user.id)
+      .eq('date', today)
+      .maybeSingle();
+
+    if (existing) return res.status(409).json({ error: 'Sudah clock in hari ini' });
+
+    const { data, error } = await supabase
+      .from('attendances')
+      .insert({
+        salesman_id: req.user.id,
+        date: today,
+        clock_in: new Date().toISOString(),
+        clock_in_lat: latitude,
+        clock_in_lng: longitude,
+        clock_in_address: address || null,
+        clock_in_photo: face_image_url || null,
+        status: 'hadir',
+      })
+      .select()
+      .single();
+    if (error) throw error;
+
+    res.status(201).json({ attendance: data, message: 'Clock in berhasil' });
+  } catch (e) {
+    console.error('Clock in error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT: clock out
+app.put('/api/attendance/clock-out', auth, requireRole(['salesman']), async (req, res) => {
+  try {
+    const { latitude, longitude, face_image_url, address } = req.body;
+    if (!latitude || !longitude) return res.status(400).json({ error: 'GPS wajib diisi' });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: existing } = await supabase
+      .from('attendances')
+      .select('id, clock_out')
+      .eq('salesman_id', req.user.id)
+      .eq('date', today)
+      .maybeSingle();
+
+    if (!existing) return res.status(404).json({ error: 'Belum clock in hari ini' });
+    if (existing.clock_out) return res.status(409).json({ error: 'Sudah clock out hari ini' });
+
+    const { data, error } = await supabase
+      .from('attendances')
+      .update({
+        clock_out: new Date().toISOString(),
+        clock_out_lat: latitude,
+        clock_out_lng: longitude,
+        clock_out_address: address || null,
+        clock_out_photo: face_image_url || null,
+      })
+      .eq('id', existing.id)
+      .select()
+      .single();
+    if (error) throw error;
+
+    res.json({ attendance: data, message: 'Clock out berhasil' });
+  } catch (e) {
+    console.error('Clock out error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET: riwayat absen (30 hari terakhir)
+app.get('/api/attendance/history', auth, requireRole(['salesman']), async (req, res) => {
+  try {
+    const { data } = await supabase
+      .from('attendances')
+      .select('*')
+      .eq('salesman_id', req.user.id)
+      .order('date', { ascending: false })
+      .limit(30);
+    res.json({ history: data || [] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET: admin lihat semua absensi
+app.get('/api/admin/attendance', auth, requireRole(['admin', 'staff']), async (req, res) => {
+  try {
+    const { date, salesman_id } = req.query;
+    let query = supabase
+      .from('attendances')
+      .select('*, users(name, email)')
+      .order('date', { ascending: false })
+      .limit(100);
+    if (date) query = query.eq('date', date);
+    if (salesman_id) query = query.eq('salesman_id', salesman_id);
+    const { data } = await query;
+    res.json({ attendance: data || [] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Admin: buat/edit target salesman ──────────────────────────
 app.post('/api/admin/salesman-targets', auth, requireRole(['admin','staff']), async (req, res) => {
   try {
