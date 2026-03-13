@@ -548,9 +548,9 @@ app.get('/api/suppliers', auth, requireRole(['admin','staff']), async (req, res)
     const storeUserIds = new Set((storeData || []).map(s => s.user_id).filter(Boolean));
 
     // Secondary: get customer users who don't have a store profile yet
-    let q2 = supabase.from('users').select('id,email,name,company_name,phone,status,created_at')
+    let q2 = supabase.from('users').select('id,email,name,phone,status,created_at')
       .eq('role', 'customer');
-    if (search) q2 = q2.or(`name.ilike.%${search}%,email.ilike.%${search}%,company_name.ilike.%${search}%`);
+    if (search) q2 = q2.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
     const { data: usersData } = await q2.order('created_at', { ascending: false });
     
     // Merge: users without store profile
@@ -601,13 +601,13 @@ app.post('/api/suppliers', auth, requireRole(['admin']), async (req, res) => {
     if (!name || !email || !password) return res.status(400).json({ error: 'name, email, dan password wajib diisi' });
     if (password.length < 6) return res.status(400).json({ error: 'Password minimal 6 karakter' });
 
-    const { data: existing } = await supabase.from('users').select('id').eq('email', email).single();
+    const { data: existing } = await supabase.from('users').select('id').eq('email', email).maybeSingle();
     if (existing) return res.status(409).json({ error: 'Email sudah terdaftar' });
 
     const hashedPassword = await bcrypt.hash(password, 12);
     const { data: user, error } = await supabase.from('users')
-      .insert({ email, password: hashedPassword, name, phone, company_name, role: 'customer', status: 'active' })
-      .select('id,email,name,role,phone,company_name,status')
+      .insert({ email, password: hashedPassword, name, phone, role: 'customer', status: 'active' })
+      .select('id,email,name,role,phone,status')
       .single();
     if (error) throw error;
 
@@ -1731,10 +1731,10 @@ app.patch('/api/settings/:key', auth, requireRole(['admin']), async (req, res) =
 // Update profile (admin/staff/customer)
 app.put('/api/auth/profile', auth, async (req, res) => {
   try {
-    const allowed = ['name', 'phone', 'company_name', 'address'];
+    const allowed = ['name', 'phone', 'address'];
     const updates = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid fields to update' });
-    const { data: user, error } = await supabase.from('users').update(updates).eq('id', req.user.id).select('id,email,name,role,phone,company_name,address,status').single();
+    const { data: user, error } = await supabase.from('users').update(updates).eq('id', req.user.id).select('id,email,name,role,phone,address,status').single();
     if (error) throw error;
     res.json({ user });
   } catch (e) {
