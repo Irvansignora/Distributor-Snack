@@ -3,14 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { salesmanService } from '@/services/salesman';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import {
   Camera,
   MapPin,
-  Clock,
   CheckCircle2,
-  XCircle,
   Loader2,
   RefreshCw,
   CalendarDays,
@@ -93,7 +90,7 @@ function useGps() {
         setCoords({ latitude, longitude, address });
         setLoading(false);
       },
-      (err) => {
+      (_err) => {
         setError('Akses GPS ditolak. Izinkan lokasi di browser.');
         setLoading(false);
       },
