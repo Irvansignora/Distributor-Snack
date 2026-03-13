@@ -1,7 +1,7 @@
- useState } from 'react';
- NavLink, useLocation } from 'react-router-dom';
- useAuth } from '@/contexts/AuthContext';
-
+import { useState } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import {
   LayoutDashboard,
   Package,
   ClipboardList,
@@ -13,13 +13,13 @@
   ChevronLeft,
   ChevronRight,
   Warehouse,
-  Tags
+  Tags,
   TrendingUp,
 } from 'lucide-react';
- cn } from '@/lib/utils';
- Button } from '@/components/ui/button';
- ScrollArea } from '@/components/ui/scroll-area';
- Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 const navItems = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
