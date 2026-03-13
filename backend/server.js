@@ -2226,7 +2226,7 @@ app.post('/api/admin/salesmen', auth, requireRole(['admin']), async (req, res) =
     if (password.length < 6) return res.status(400).json({ error: 'Password minimal 6 karakter' });
 
     const normalizedEmail = email.toString().trim().toLowerCase();
-    const { data: existing } = await supabase.from('users').select('id').eq('email', normalizedEmail).single().catch(() => ({ data: null }));
+    const { data: existing } = await supabase.from('users').select('id').eq('email', normalizedEmail).maybeSingle();
     if (existing) return res.status(409).json({ error: 'Email sudah terdaftar' });
 
     const hashedPassword = await bcrypt.hash(password, 12);
