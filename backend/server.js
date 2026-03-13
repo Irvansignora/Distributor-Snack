@@ -1680,6 +1680,519 @@ app.put('/api/auth/change-password', auth, async (req, res) => {
   }
 });
 
+
+// ════════════════════════════════════════════════════════════════
+// SALESMAN MODULE
+// ════════════════════════════════════════════════════════════════
+
+// Helper: require salesman or admin
+function requireSalesman(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  if (!['salesman','admin','staff'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Akses ditolak' });
+  }
+  next();
+}
+
+// ── Dashboard salesman ──────────────────────────────────────────
+app.get('/api/salesman/dashboard', auth, requireSalesman, async (req, res) => {
+  try {
+    const salesmanId = req.user.role === 'salesman' ? req.user.id : req.query.salesman_id;
+    const now = new Date();
+    const monthStart = startOfMonth(now).toISOString();
+    const monthEnd   = endOfMonth(now).toISOString();
+    const todayStart = startOfDay(now).toISOString();
+    const todayEnd   = endOfDay(now).toISOString();
+
+    const [visitsToday, visitsMonth, ordersMonth, target, storesAssigned, arData] = await Promise.all([
+      // kunjungan hari ini
+      supabase.from('store_visits').select('*', { count: 'exact', head: true })
+        .eq('salesman_id', salesmanId)
+        .gte('checkin_at', todayStart).lte('checkin_at', todayEnd),
+      // kunjungan bulan ini
+      supabase.from('store_visits').select('id, order_id, payment_collected')
+        .eq('salesman_id', salesmanId)
+        .gte('checkin_at', monthStart).lte('checkin_at', monthEnd),
+      // order bulan ini (via visits)
+      supabase.from('store_visits').select('orders(total)')
+        .eq('salesman_id', salesmanId)
+        .not('order_id', 'is', null)
+        .gte('checkin_at', monthStart).lte('checkin_at', monthEnd),
+      // target bulan ini
+      supabase.from('salesman_targets')
+        .select('*')
+        .eq('salesman_id', salesmanId)
+        .eq('period_month', now.getMonth() + 1)
+        .eq('period_year', now.getFullYear())
+        .single(),
+      // toko yang di-assign
+      supabase.from('customer_stores').select('id', { count: 'exact', head: true })
+        .eq('assigned_salesman_id', salesmanId),
+      // piutang toko yang di-assign
+      supabase.from('customer_stores')
+        .select('credit_used, credit_limit')
+        .eq('assigned_salesman_id', salesmanId),
+    ]);
+
+    const revenueMonth = (ordersMonth.data || []).reduce((s, v) => s + (v.orders?.total || 0), 0);
+    const paymentCollected = (visitsMonth.data || []).reduce((s, v) => s + (v.payment_collected || 0), 0);
+    const totalAR = (arData.data || []).reduce((s, s2) => s + (s2.credit_used || 0), 0);
+    const targetRevenue = target.data?.target_revenue || 0;
+    const achievementPct = targetRevenue > 0 ? Math.round((revenueMonth / targetRevenue) * 100) : 0;
+    const estimatedCommission = revenueMonth * (target.data?.commission_rate || 0.02);
+
+    res.json({
+      today: {
+        visits: visitsToday.count || 0,
+      },
+      month: {
+        visits: (visitsMonth.data || []).length,
+        orders: (ordersMonth.data || []).length,
+        revenue: revenueMonth,
+        payment_collected: paymentCollected,
+        achievement_pct: achievementPct,
+        estimated_commission: estimatedCommission,
+      },
+      target: target.data || null,
+      stores_assigned: storesAssigned.count || 0,
+      total_ar: totalAR,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Daftar toko yang di-assign ke salesman ──────────────────────
+app.get('/api/salesman/stores', auth, requireSalesman, async (req, res) => {
+  try {
+    const salesmanId = req.user.role === 'salesman' ? req.user.id : req.query.salesman_id;
+    const { search, status } = req.query;
+
+    let q = supabase.from('customer_stores')
+      .select('*, users(name, email, phone)')
+      .eq('assigned_salesman_id', salesmanId)
+      .order('route_order', { ascending: true });
+
+    if (status) q = q.eq('status', status);
+    if (search) q = q.ilike('store_name', `%${search}%`);
+
+    const { data, error } = await q;
+    if (error) throw error;
+
+    // Tambah info AR per toko
+    const stores = (data || []).map(s => ({
+      ...s,
+      name: s.owner_name || s.users?.name,
+      email: s.users?.email,
+      ar_percentage: s.credit_limit > 0 ? Math.round((s.credit_used / s.credit_limit) * 100) : 0,
+      days_since_visit: s.last_visit_at
+        ? Math.floor((Date.now() - new Date(s.last_visit_at).getTime()) / 86400000)
+        : null,
+    }));
+
+    res.json({ stores });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Detail toko (untuk salesman: lihat histori beli + AR) ───────
+app.get('/api/salesman/stores/:id', auth, requireSalesman, async (req, res) => {
+  try {
+    const { data: store, error } = await supabase
+      .from('customer_stores')
+      .select('*, users(name, email, phone)')
+      .eq('id', req.params.id)
+      .single();
+    if (error || !store) return res.status(404).json({ error: 'Toko tidak ditemukan' });
+
+    // Ambil 10 order terakhir
+    const { data: orders } = await supabase
+      .from('orders')
+      .select('id, order_number, total, status, payment_status, created_at, order_items(product_name, qty_karton, price_per_karton, subtotal)')
+      .eq('store_id', req.params.id)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    // Ambil 5 kunjungan terakhir
+    const { data: visits } = await supabase
+      .from('store_visits')
+      .select('id, checkin_at, visit_result, notes, payment_collected, salesman_id')
+      .eq('store_id', req.params.id)
+      .order('checkin_at', { ascending: false })
+      .limit(5);
+
+    res.json({
+      store: {
+        ...store,
+        name: store.owner_name || store.users?.name,
+        email: store.users?.email,
+        ar_percentage: store.credit_limit > 0 ? Math.round((store.credit_used / store.credit_limit) * 100) : 0,
+      },
+      orders: orders || [],
+      visits: visits || [],
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Buat order dari aplikasi salesman ──────────────────────────
+app.post('/api/salesman/orders', auth, requireSalesman, async (req, res) => {
+  try {
+    const { store_id, items, notes, payment_method, is_credit } = req.body;
+    if (!store_id || !items?.length) return res.status(400).json({ error: 'store_id dan items wajib diisi' });
+
+    const { data: store } = await supabase.from('customer_stores').select('*').eq('id', store_id).single();
+    if (!store) return res.status(404).json({ error: 'Toko tidak ditemukan' });
+
+    // Hitung subtotal
+    let subtotal = 0;
+    const orderItems = [];
+
+    for (const item of items) {
+      const { data: product } = await supabase.from('products')
+        .select('*, price_tiers(*)')
+        .eq('id', item.product_id).single();
+      if (!product) continue;
+
+      const tier = product.price_tiers?.find(t => t.tier === store.tier) || product.price_tiers?.[0];
+      const pricePerKarton = tier?.price_per_karton || 0;
+      const qty = item.qty_karton || 1;
+      const itemSubtotal = pricePerKarton * qty;
+      subtotal += itemSubtotal;
+
+      orderItems.push({
+        product_id: item.product_id,
+        product_name: product.name,
+        product_sku: product.sku,
+        qty_karton: qty,
+        tier_applied: store.tier,
+        price_per_karton: pricePerKarton,
+        subtotal: itemSubtotal,
+      });
+    }
+
+    const total = subtotal;
+
+    // Buat order
+    const { data: order, error: orderError } = await supabase.from('orders').insert({
+      store_id,
+      created_by: req.user.id,
+      subtotal,
+      total,
+      notes,
+      payment_method: payment_method || 'transfer',
+      is_credit_order: is_credit || false,
+      status: 'confirmed', // salesman langsung confirmed
+    }).select().single();
+    if (orderError) throw orderError;
+
+    // Insert order items
+    const itemsWithOrderId = orderItems.map(i => ({ ...i, order_id: order.id }));
+    await supabase.from('order_items').insert(itemsWithOrderId);
+
+    // Kurangi stok
+    for (const item of items) {
+      await supabase.from('products').select('stock_karton').eq('id', item.product_id).single()
+        .then(({ data: p }) => {
+          if (p) supabase.from('products').update({ stock_karton: Math.max(0, p.stock_karton - (item.qty_karton || 1)) }).eq('id', item.product_id);
+        });
+    }
+
+    res.status(201).json({ message: 'Order berhasil dibuat', order });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Check-in toko ──────────────────────────────────────────────
+app.post('/api/salesman/checkin', auth, requireSalesman, async (req, res) => {
+  try {
+    const { store_id, lat, lng, photo_url } = req.body;
+    if (!store_id) return res.status(400).json({ error: 'store_id wajib diisi' });
+
+    // Cek apakah sudah ada visit aktif (belum checkout)
+    const { data: activeVisit } = await supabase
+      .from('store_visits')
+      .select('id')
+      .eq('salesman_id', req.user.id)
+      .eq('store_id', store_id)
+      .is('checkout_at', null)
+      .gte('checkin_at', startOfDay(new Date()).toISOString())
+      .single();
+
+    if (activeVisit) return res.status(409).json({ error: 'Sudah check-in di toko ini, harap checkout dulu' });
+
+    const { data: visit, error } = await supabase.from('store_visits').insert({
+      salesman_id: req.user.id,
+      store_id,
+      checkin_at: new Date().toISOString(),
+      checkin_lat: lat,
+      checkin_lng: lng,
+      checkin_photo_url: photo_url,
+      visit_result: 'visited',
+    }).select().single();
+    if (error) throw error;
+
+    res.status(201).json({ message: 'Check-in berhasil', visit });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Check-out toko ─────────────────────────────────────────────
+app.patch('/api/salesman/visits/:id/checkout', auth, requireSalesman, async (req, res) => {
+  try {
+    const { lat, lng, visit_result, notes, order_id, payment_collected } = req.body;
+
+    const { data: visit, error } = await supabase
+      .from('store_visits')
+      .update({
+        checkout_at: new Date().toISOString(),
+        checkout_lat: lat,
+        checkout_lng: lng,
+        visit_result: visit_result || 'visited',
+        notes,
+        order_id: order_id || null,
+        payment_collected: payment_collected || 0,
+      })
+      .eq('id', req.params.id)
+      .eq('salesman_id', req.user.id)
+      .select().single();
+    if (error) throw error;
+
+    res.json({ message: 'Check-out berhasil', visit });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Riwayat kunjungan salesman ──────────────────────────────────
+app.get('/api/salesman/visits', auth, requireSalesman, async (req, res) => {
+  try {
+    const salesmanId = req.user.role === 'salesman' ? req.user.id : req.query.salesman_id;
+    const { date, store_id } = req.query;
+
+    let q = supabase.from('store_visits')
+      .select('*, customer_stores(store_name, owner_name, address_line), orders(order_number, total, status)')
+      .eq('salesman_id', salesmanId)
+      .order('checkin_at', { ascending: false });
+
+    if (date) {
+      const d = new Date(date);
+      q = q.gte('checkin_at', startOfDay(d).toISOString())
+           .lte('checkin_at', endOfDay(d).toISOString());
+    }
+    if (store_id) q = q.eq('store_id', store_id);
+
+    const { data, error } = await q.limit(50);
+    if (error) throw error;
+    res.json({ visits: data || [] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Stok kendaraan ─────────────────────────────────────────────
+app.get('/api/salesman/vehicle-stock', auth, requireSalesman, async (req, res) => {
+  try {
+    const salesmanId = req.user.role === 'salesman' ? req.user.id : req.query.salesman_id;
+    const date = req.query.date || new Date().toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+      .from('vehicle_stocks')
+      .select('*, products(id, name, sku, image_url, unit_type)')
+      .eq('salesman_id', salesmanId)
+      .eq('date', date);
+    if (error) throw error;
+
+    res.json({ stocks: data || [], date });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/salesman/vehicle-stock/load', auth, requireSalesman, async (req, res) => {
+  try {
+    const { items, date } = req.body; // items: [{product_id, qty_loaded}]
+    const today = date || new Date().toISOString().split('T')[0];
+
+    const inserts = items.map(i => ({
+      salesman_id: req.user.id,
+      product_id: i.product_id,
+      date: today,
+      qty_loaded: i.qty_loaded,
+      qty_sold: 0,
+      qty_returned: 0,
+    }));
+
+    const { data, error } = await supabase.from('vehicle_stocks').upsert(inserts, {
+      onConflict: 'salesman_id,product_id,date'
+    }).select();
+    if (error) throw error;
+
+    res.json({ message: 'Stok kendaraan berhasil diperbarui', stocks: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/salesman/vehicle-stock/:id/opname', auth, requireSalesman, async (req, res) => {
+  try {
+    const { qty_sold, qty_returned, notes } = req.body;
+    const { data, error } = await supabase.from('vehicle_stocks')
+      .update({ qty_sold, qty_returned, notes, closed_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .eq('salesman_id', req.user.id)
+      .select().single();
+    if (error) throw error;
+    res.json({ message: 'Opname berhasil', stock: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Target & performa ──────────────────────────────────────────
+app.get('/api/salesman/performance', auth, requireSalesman, async (req, res) => {
+  try {
+    const salesmanId = req.user.role === 'salesman' ? req.user.id : req.query.salesman_id;
+    const month = parseInt(req.query.month) || (new Date().getMonth() + 1);
+    const year  = parseInt(req.query.year) || new Date().getFullYear();
+
+    const { data: achievement } = await supabase
+      .from('v_salesman_monthly_achievement')
+      .select('*')
+      .eq('salesman_id', salesmanId)
+      .eq('period_month', month)
+      .eq('period_year', year)
+      .single();
+
+    // Daily breakdown
+    const monthStart = new Date(year, month - 1, 1).toISOString();
+    const monthEnd   = new Date(year, month, 0, 23, 59, 59).toISOString();
+
+    const { data: dailyVisits } = await supabase
+      .from('store_visits')
+      .select('checkin_at, order_id, payment_collected, orders(total)')
+      .eq('salesman_id', salesmanId)
+      .gte('checkin_at', monthStart)
+      .lte('checkin_at', monthEnd)
+      .order('checkin_at');
+
+    // Group by day
+    const dailyMap = {};
+    for (const v of dailyVisits || []) {
+      const day = v.checkin_at.split('T')[0];
+      if (!dailyMap[day]) dailyMap[day] = { date: day, visits: 0, revenue: 0, payment: 0 };
+      dailyMap[day].visits++;
+      dailyMap[day].revenue += v.orders?.total || 0;
+      dailyMap[day].payment += v.payment_collected || 0;
+    }
+
+    res.json({
+      achievement: achievement || null,
+      daily: Object.values(dailyMap),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Admin: semua salesman ──────────────────────────────────────
+app.get('/api/admin/salesmen', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('id, name, email, phone, created_at')
+      .eq('role', 'salesman')
+      .order('name');
+    if (error) throw error;
+
+    // Performa bulan ini untuk setiap salesman
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+
+    const { data: achievements } = await supabase
+      .from('v_salesman_monthly_achievement')
+      .select('*')
+      .eq('period_month', month)
+      .eq('period_year', year);
+
+    const achMap = {};
+    (achievements || []).forEach(a => { achMap[a.salesman_id] = a; });
+
+    const salesmen = (users || []).map(u => ({
+      ...u,
+      achievement: achMap[u.id] || null,
+    }));
+
+    res.json({ salesmen });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Admin: buat/edit target salesman ──────────────────────────
+app.post('/api/admin/salesman-targets', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { salesman_id, period_month, period_year, target_revenue, target_visits,
+            commission_rate, bonus_threshold, bonus_amount, notes } = req.body;
+
+    const { data, error } = await supabase.from('salesman_targets').upsert({
+      salesman_id, period_month, period_year, target_revenue, target_visits,
+      commission_rate, bonus_threshold, bonus_amount, notes,
+      created_by: req.user.id,
+    }, { onConflict: 'salesman_id,period_month,period_year' }).select().single();
+    if (error) throw error;
+
+    res.json({ message: 'Target berhasil disimpan', target: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Admin: assign toko ke salesman ────────────────────────────
+app.post('/api/admin/assign-store', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { store_id, salesman_id } = req.body;
+    const { error } = await supabase.from('customer_stores')
+      .update({ assigned_salesman_id: salesman_id })
+      .eq('id', store_id);
+    if (error) throw error;
+    res.json({ message: 'Toko berhasil di-assign' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Admin: semua kunjungan (monitoring) ───────────────────────
+app.get('/api/admin/visits', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { salesman_id, date, page = 1, limit = 20 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    let q = supabase.from('store_visits')
+      .select('*, users!salesman_id(name), customer_stores(store_name, owner_name), orders(order_number, total)', { count: 'exact' })
+      .order('checkin_at', { ascending: false })
+      .range(offset, offset + parseInt(limit) - 1);
+
+    if (salesman_id) q = q.eq('salesman_id', salesman_id);
+    if (date) {
+      const d = new Date(date);
+      q = q.gte('checkin_at', startOfDay(d).toISOString())
+           .lte('checkin_at', endOfDay(d).toISOString());
+    }
+
+    const { data, error, count } = await q;
+    if (error) throw error;
+    res.json({ visits: data || [], total: count || 0 });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ════════════════════════════════════════════════════════════════
 // ERROR HANDLER
 // ════════════════════════════════════════════════════════════════
