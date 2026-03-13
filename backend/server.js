@@ -20,48 +20,35 @@ cloudinary.config({
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'https://distributor-snack.vercel.app',
-  'https://be-distributor-snack.vercel.app',
-  process.env.FRONTEND_URL,
-].filter(Boolean);
+// ── CORS ─────────────────────────────────────────────────────────────────────
+// Di Vercel serverless, OPTIONS preflight HARUS dijawab sebelum middleware lain.
+// Kalau ada error 500 (env kosong dll), preflight ikut 500 dan browser block login.
+// Solusi: set CORS headers di middleware PERTAMA, short-circuit OPTIONS langsung.
+// Tidak pakai package cors sebagai gatekeeper — cukup express middleware manual.
 
-// FIX-CORS: helper — returns true if origin is allowed
-function isOriginAllowed(origin) {
-  if (!origin) return true;
-  if (allowedOrigins.includes(origin)) return true;
-  if (/^https:\/\/[a-zA-Z0-9-]+(\.vercel\.app)$/.test(origin)) return true;
-  if (/^http:\/\/localhost(:\d+)?$/.test(origin)) return true;
-  return false;
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin;
+  const allowed =
+    !origin ||
+    /^https?:\/\/localhost(:\d+)?$/.test(origin) ||
+    /^https:\/\/[a-zA-Z0-9][a-zA-Z0-9-]*(\.[a-zA-Z0-9-]+)*\.vercel\.app$/.test(origin) ||
+    origin === (process.env.FRONTEND_URL || '');
+
+  res.setHeader('Access-Control-Allow-Origin',      allowed ? (origin || '*') : 'null');
+  res.setHeader('Access-Control-Allow-Methods',     'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers',     'Content-Type,Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Max-Age',           '86400');
+  res.setHeader('Vary', 'Origin');
 }
 
-// FIX-CORS: set headers SEBELUM middleware lain — kritis untuk Vercel serverless
-// tanpa ini preflight OPTIONS bisa gagal sebelum Express sempat handle
+// Middleware #1: CORS + preflight — HARUS sebelum express.json() dan route lain
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (isOriginAllowed(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Max-Age', '86400');
-    res.setHeader('Vary', 'Origin');
-  }
+  setCorsHeaders(req, res);
   if (req.method === 'OPTIONS') return res.status(204).end();
   next();
 });
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (isOriginAllowed(origin)) return callback(null, true);
-    return callback(new Error('Not allowed by CORS'));
-  },
-  credentials: true,
-  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization'],
-}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
