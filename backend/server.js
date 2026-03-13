@@ -744,16 +744,21 @@ app.get('/api/products', auth, async (req, res) => {
       customerTier = store?.tier || 'bronze';
     } else {
       storeApproved = true;
-      customerTier = 'gold'; // admin sees gold price as reference
+      customerTier = 'bronze'; // admin: tampilkan harga bronze sebagai referensi
     }
 
+    const TIER_ORDER = ['bronze', 'silver', 'gold', 'platinum'];
     const products = (data || []).map(p => {
-      const tierPrice = p.price_tiers?.find(t => t.tier === customerTier);
+      // Cari harga sesuai tier, fallback ke tier lain yang tersedia
+      let tierPrice = p.price_tiers?.find(t => t.tier === customerTier);
+      if (!tierPrice && p.price_tiers?.length) {
+        tierPrice = TIER_ORDER.map(tier => p.price_tiers?.find(t => t.tier === tier)).find(Boolean);
+      }
       return {
         ...p,
         // Legacy field names for frontend compatibility
-        price: storeApproved ? (tierPrice?.price_per_karton || null) : null,
-        wholesale_price: storeApproved ? (tierPrice?.price_per_karton || null) : null,
+        price: storeApproved ? (tierPrice?.price_per_karton || 0) : null,
+        wholesale_price: storeApproved ? (tierPrice?.price_per_karton || 0) : null,
         stock_quantity: p.stock_karton,
         price_hidden: !storeApproved,
         price_tiers: ['admin','staff'].includes(req.user.role) ? p.price_tiers : undefined,
