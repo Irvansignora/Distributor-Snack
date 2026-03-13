@@ -4,8 +4,28 @@ import { authService } from '@/services/auth';
 import { CartProvider } from '@/hooks/useCart';
 import type { User, LoginCredentials, RegisterData } from '@/types';
 
+// ── Store type (minimal, sesuai response API) ─────────────────────────────────
+interface CustomerStore {
+  id: string;
+  user_id: string;
+  store_name: string;
+  owner_name?: string;
+  status: 'draft' | 'pending_review' | 'approved' | 'rejected' | 'suspended';
+  tier?: 'bronze' | 'silver' | 'gold' | 'platinum';
+  credit_limit?: number;
+  credit_used?: number;
+  ktp_photo_url?: string;
+  store_photo_url?: string;
+  whatsapp?: string;
+  phone_store?: string;
+  address_line?: string;
+  store_type?: string;
+  [key: string]: unknown;
+}
+
 interface AuthContextType {
   user: User | null;
+  store: CustomerStore | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
@@ -13,11 +33,13 @@ interface AuthContextType {
   logout: () => void;
   hasRole: (roles: string[]) => boolean;
   updateUser: (updated: Partial<User>) => void;
+  // FIX-01: expose refreshStore agar Onboarding.tsx bisa reload setelah update
+  refreshStore: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// BUG-14 FIX: expose logout callback agar api.ts bisa trigger tanpa import circular
+// FIX-02: expose logout callback agar api.ts bisa trigger tanpa import circular
 let globalLogout: (() => void) | null = null;
 export function triggerLogout() {
   globalLogout?.();
@@ -25,6 +47,7 @@ export function triggerLogout() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [store, setStore] = useState<CustomerStore | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -35,6 +58,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const userData = await authService.getCurrentUser();
           setUser(userData.user);
+          // FIX-03: simpan store ke state saat init
+          if ((userData as any).store) {
+            setStore((userData as any).store);
+          }
         } catch {
           localStorage.removeItem('token');
         }
@@ -44,24 +71,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initAuth();
   }, []);
 
-  // BUG-14 FIX: register global logout untuk dipakai api.ts interceptor
   useEffect(() => {
     globalLogout = () => {
       localStorage.removeItem('token');
-      localStorage.removeItem('cart'); // BUG-10 FIX
+      localStorage.removeItem('cart');
       setUser(null);
+      setStore(null);
       navigate('/login');
     };
     return () => { globalLogout = null; };
   }, [navigate]);
 
-  // BUG-04 FIX: error di-throw ke caller (Login.tsx sudah punya catch)
+  // FIX-04: tambah catch + throw agar error dari API bisa ditangkap Login.tsx
+  // Sebelumnya hanya try/finally tanpa catch — error ditelan diam-diam di beberapa edge case
   const login = async (credentials: LoginCredentials) => {
     setIsLoading(true);
     try {
       const response = await authService.login(credentials);
+
+      if (!response.token) {
+        throw new Error('Token tidak diterima dari server. Coba lagi.');
+      }
+
       localStorage.setItem('token', response.token);
       setUser(response.user);
+
+      // FIX-05: simpan store ke state setelah login (customer)
+      if ((response as any).store) {
+        setStore((response as any).store);
+      }
 
       if (response.user.role === 'admin' || response.user.role === 'staff') {
         navigate('/admin/dashboard');
@@ -70,6 +108,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else if (response.user.role === 'supplier' || response.user.role === 'customer') {
         navigate('/supplier/dashboard');
       }
+    } catch (err) {
+      // FIX-04: re-throw agar Login.tsx bisa menampilkan pesan error
+      throw err;
     } finally {
       setIsLoading(false);
     }
@@ -79,22 +120,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const response = await authService.register(data);
+
+      if (!response.token) {
+        throw new Error('Registrasi berhasil tapi token tidak diterima. Silakan login manual.');
+      }
+
       localStorage.setItem('token', response.token);
       setUser(response.user);
+
+      if ((response as any).store) {
+        setStore((response as any).store);
+      }
 
       if (response.user.role === 'supplier' || response.user.role === 'customer') {
         navigate('/supplier/dashboard');
       }
+    } catch (err) {
+      // FIX-04: re-throw agar Register.tsx bisa menampilkan pesan error
+      throw err;
     } finally {
       setIsLoading(false);
     }
   };
 
-  // BUG-10 FIX: cart di-clear saat logout
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('cart');
     setUser(null);
+    setStore(null);
     navigate('/login');
   };
 
@@ -102,15 +155,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user ? roles.includes(user.role) : false;
   };
 
-  // BUG-09 FIX: helper untuk update user state setelah profile save
   const updateUser = (updated: Partial<User>) => {
     setUser(prev => prev ? { ...prev, ...updated } : prev);
+  };
+
+  // FIX-01: refreshStore dipanggil Onboarding setelah upload dokumen / submit review
+  const refreshStore = async () => {
+    try {
+      const userData = await authService.getCurrentUser();
+      if ((userData as any).store) {
+        setStore((userData as any).store);
+      }
+    } catch {
+      // silent — jika gagal, state store tetap yang lama
+    }
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
+        store,
         isLoading,
         isAuthenticated: !!user,
         login,
@@ -118,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         hasRole,
         updateUser,
+        refreshStore,
       }}
     >
       <CartProvider>
