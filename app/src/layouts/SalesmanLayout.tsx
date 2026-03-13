@@ -15,15 +15,12 @@ import {
   Store,
   ClipboardList,
   Truck,
-  BarChart3,
   Sun,
   Moon,
   LogOut,
-  User,
   TrendingUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useTheme as useThemeHook } from '@/contexts/ThemeContext';
 
 const bottomNavItems = [
   { to: '/salesman/dashboard', label: 'Dashboard', icon: LayoutDashboard },
