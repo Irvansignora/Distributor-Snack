@@ -37,7 +37,7 @@ export interface Category {
 }
 
 export interface PriceTier {
-  tier: 'bronze' | 'silver' | 'gold' | 'platinum';
+  tier: 'agent' | 'reseller';
   price_per_karton: number;
   price_per_pack?: number;
   price_per_pcs?: number;
