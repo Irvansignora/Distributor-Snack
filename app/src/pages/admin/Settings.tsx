@@ -10,7 +10,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTax } from '@/contexts/TaxContext';
 import api from '@/services/api';
-import { User, Bell, Shield, Store, Moon, Sun, Laptop, Loader2, Percent } from 'lucide-react';
+import { User, Bell, Shield, Store, Moon, Sun, Laptop, Loader2, Percent, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 
 // BUG-09 FIX: Settings.tsx terhubung ke API
@@ -93,11 +93,18 @@ export default function Settings() {
 
   const [ppnValue, setPpnValue] = useState<string>('');
 
+  // --- Tab Tier Harga ---
+  const [tierAgentMin, setTierAgentMin] = useState<string>('');
+  const [tierSaving, setTierSaving] = useState(false);
+
   useEffect(() => {
     if (settingsData?.ppn_rate !== undefined) {
       setPpnValue(String(settingsData.ppn_rate));
     } else {
       setPpnValue(String(taxPercent));
+    }
+    if (settingsData?.tier_agent_min !== undefined) {
+      setTierAgentMin(String(settingsData.tier_agent_min?.value ?? settingsData.tier_agent_min ?? ''));
     }
   }, [settingsData, taxPercent]);
 
@@ -122,6 +129,24 @@ export default function Settings() {
     savePpnMutation.mutate(num);
   };
 
+  const handleSaveTier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const num = parseFloat(tierAgentMin);
+    if (isNaN(num) || num < 0) {
+      toast.error('Min. pembelian Agent harus angka positif');
+      return;
+    }
+    setTierSaving(true);
+    try {
+      await api.patch('/settings/tier_thresholds', { agent_min: num });
+      toast.success('Threshold tier berhasil disimpan, tier toko diperbarui otomatis');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal menyimpan threshold tier');
+    } finally {
+      setTierSaving(false);
+    }
+  };
+
   const isAdmin = user?.role === 'admin';
 
   return (
@@ -132,7 +157,7 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="profile">
-        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} lg:w-auto`}>
+        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-6' : 'grid-cols-4'} lg:w-auto`}>
           <TabsTrigger value="profile">
             <User className="mr-2 h-4 w-4" />
             Profile
@@ -154,6 +179,12 @@ export default function Settings() {
             <TabsTrigger value="tax">
               <Percent className="mr-2 h-4 w-4" />
               PPN
+            </TabsTrigger>
+          )}
+          {isAdmin && (
+            <TabsTrigger value="tier">
+              <TrendingUp className="mr-2 h-4 w-4" />
+              Tier Harga
             </TabsTrigger>
           )}
         </TabsList>
@@ -367,6 +398,70 @@ export default function Settings() {
                     {savePpnMutation.isPending
                       ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menyimpan...</>
                       : 'Simpan Tarif PPN'}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+        {/* --- Tier Harga Tab (admin only) --- */}
+        {isAdmin && (
+          <TabsContent value="tier" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Pengaturan Tier Harga Otomatis</CardTitle>
+                <CardDescription>
+                  Tier pelanggan ditentukan otomatis berdasarkan total pembelian bulan berjalan.
+                  Hanya ada 2 tier: <strong>Agent</strong> dan <strong>Reseller</strong>.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSaveTier} className="space-y-6 max-w-md">
+                  <div className="rounded-lg border p-4 space-y-3 bg-muted/30">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                      <span className="font-semibold">Agent</span>
+                      <span className="text-xs text-muted-foreground ml-auto">Harga lebih murah</span>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="agent-min">Min. Pembelian Bulanan (Rp)</Label>
+                      <Input
+                        id="agent-min"
+                        type="number"
+                        min="0"
+                        step="100000"
+                        value={tierAgentMin}
+                        onChange={e => setTierAgentMin(e.target.value)}
+                        placeholder="Contoh: 5000000"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Pelanggan dengan total order bulan ini ≥ nilai ini → otomatis jadi Agent
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border p-4 space-y-3 bg-muted/30">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-amber-500" />
+                      <span className="font-semibold">Reseller</span>
+                      <span className="text-xs text-muted-foreground ml-auto">Harga standar</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Semua pelanggan di bawah minimum Agent → otomatis Reseller.
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3">
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      ⚠️ Setelah simpan, tier semua pelanggan akan dihitung ulang otomatis berdasarkan
+                      order bulan ini. Tier juga diperbarui otomatis setiap kali order selesai.
+                    </p>
+                  </div>
+
+                  <Button type="submit" disabled={tierSaving}>
+                    {tierSaving
+                      ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menyimpan & menghitung ulang...</>
+                      : 'Simpan & Terapkan'}
                   </Button>
                 </form>
               </CardContent>
