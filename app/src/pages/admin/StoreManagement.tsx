@@ -226,8 +226,9 @@ export default function StoreManagement() {
                     // BUG FIX: credit_limit bisa undefined/null — default ke 0
                     const creditLimit  = s.credit_limit  ?? 0;
                     const creditUsed   = s.credit_used   ?? s.current_credit ?? 0;
-                    // detail link: pakai store id, fallback ke user_id untuk user tanpa store profile
-                    const detailId     = s.store_id || s.user_id || s.id;
+                    // detail link: s.id sudah benar (store UUID untuk storeSuppliers, user UUID untuk extraUsers)
+                    // backend GET /suppliers/:id sekarang handle keduanya
+                    const detailId     = s.id;
 
                     return (
                       <tr key={s.id} className="border-b hover:bg-muted/30 transition-colors">
@@ -300,7 +301,7 @@ export default function StoreManagement() {
                                 className="bg-emerald-600 hover:bg-emerald-700 h-7 px-2 text-xs"
                                 onClick={() => {
                                   // Kirim store_id (dari v_stores_full) atau user_id sebagai fallback
-                                  setApproveDialog({ ...s, _approveId: s.store_id || s.user_id || s.id });
+                                  setApproveDialog({ ...s, _approveId: s.id });
                                   setApproveData({ tier: s.tier || 'reseller', credit_limit: String(s.credit_limit || 0), notes: '' });
                                 }}
                               >
