@@ -458,10 +458,31 @@ app.patch('/api/admin/stores/:id/approve', auth, requireRole(['admin']), async (
   try {
     const { tier = 'reseller', credit_limit = 0, notes } = req.body;
 
-    // Update store status dulu
+    // Cari store: coba by store.id dulu, fallback by user_id
+    const storeId = req.params.id;
+    let { data: existingStore } = await supabase.from('customer_stores')
+      .select('id').eq('id', storeId).maybeSingle();
+    
+    // Kalau tidak ketemu by store.id, coba by user_id (untuk user yg ditambah admin)
+    if (!existingStore) {
+      const { data: byUser } = await supabase.from('customer_stores')
+        .select('id').eq('user_id', storeId).maybeSingle();
+      if (!byUser) {
+        // Belum punya store profile sama sekali — buat dulu
+        const { data: newStore, error: createErr } = await supabase.from('customer_stores')
+          .insert({ user_id: storeId, store_name: '-', owner_name: '-', status: 'approved', tier, credit_limit })
+          .select('id').single();
+        if (createErr) throw createErr;
+        existingStore = newStore;
+      } else {
+        existingStore = byUser;
+      }
+    }
+
+    // Update store status
     const { data: store, error } = await supabase.from('customer_stores')
       .update({ status: 'approved', tier, credit_limit, reviewed_by: req.user.id, reviewed_at: new Date().toISOString(), notes })
-      .eq('id', req.params.id)
+      .eq('id', existingStore.id)
       .select('*')
       .single();
     if (error) throw error;
@@ -499,9 +520,20 @@ app.patch('/api/admin/stores/:id/reject', auth, requireRole(['admin']), async (r
     const { reason } = req.body;
     if (!reason) return res.status(400).json({ error: 'Alasan penolakan wajib diisi' });
 
+    // Cari store: coba by store.id dulu, fallback by user_id
+    const storeId = req.params.id;
+    let { data: existingStore } = await supabase.from('customer_stores')
+      .select('id').eq('id', storeId).maybeSingle();
+    if (!existingStore) {
+      const { data: byUser } = await supabase.from('customer_stores')
+        .select('id').eq('user_id', storeId).maybeSingle();
+      existingStore = byUser;
+    }
+    if (!existingStore) throw new Error('Store tidak ditemukan');
+
     const { data: store, error } = await supabase.from('customer_stores')
       .update({ status: 'rejected', rejection_reason: reason, reviewed_by: req.user.id, reviewed_at: new Date().toISOString() })
-      .eq('id', req.params.id)
+      .eq('id', existingStore.id)
       .select('*')
       .single();
     if (error) throw error;
