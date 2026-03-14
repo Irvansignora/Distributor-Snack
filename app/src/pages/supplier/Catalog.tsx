@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { NavLink } from 'react-router-dom';
 import { productService } from '@/services/products';
 import { useCart } from '@/hooks/useCart';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -30,6 +31,9 @@ export default function Catalog() {
   const [category, setCategory] = useState('all');
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const { addToCart } = useCart();
+  const { store } = useAuth();
+  // Tier user: 'agent' atau 'reseller' (default reseller jika belum ada)
+  const userTier: 'agent' | 'reseller' = (store?.tier as 'agent' | 'reseller') || 'reseller';
 
   const { data: productsData, isLoading } = useQuery({
     queryKey: ['products', search, category],
@@ -58,7 +62,19 @@ export default function Catalog() {
       toast.error(`Stok tersedia hanya ${product.stock_quantity} item`);
       return;
     }
-    addToCart(product, quantity);
+    // Inject harga tier yang benar ke product sebelum masuk cart
+    const tierPrice = (() => {
+      if (product.price_tiers?.length) {
+        const tierData = product.price_tiers.find((t: any) => t.tier === userTier);
+        if (tierData?.price_per_karton) return tierData.price_per_karton;
+        return product.price_tiers[0]?.price_per_karton || product.price || 0;
+      }
+      if (userTier === 'agent' && product.wholesale_price) return product.wholesale_price;
+      return product.price || 0;
+    })();
+    // Override price agar useCart total konsisten
+    const productWithTierPrice = { ...product, price: tierPrice, wholesale_price: tierPrice };
+    addToCart(productWithTierPrice, quantity);
     toast.success(`${product.name} ditambahkan ke keranjang`);
     setQuantities(prev => ({ ...prev, [product.id]: 1 }));
   };
@@ -149,6 +165,7 @@ export default function Catalog() {
               onQuantityChange={(delta) => handleQuantityChange(product.id, delta)}
               onAddToCart={() => handleAddToCart(product)}
               formatCurrency={formatCurrency}
+              userTier={userTier}
             />
           ))}
         </div>
@@ -162,16 +179,37 @@ function ProductCard({
   quantity,
   onQuantityChange,
   onAddToCart,
-  formatCurrency
+  formatCurrency,
+  userTier,
 }: {
   product: Product;
   quantity: number;
   onQuantityChange: (delta: number) => void;
   onAddToCart: () => void;
   formatCurrency: (value: number) => string;
+  userTier: 'agent' | 'reseller';
 }) {
   const isOutOfStock = product.stock_quantity === 0;
   const isLowStock = product.stock_quantity <= product.reorder_level;
+
+  // Ambil harga sesuai tier user dari price_tiers, fallback ke price legacy
+  const getTierPrice = (): number => {
+    if (product.price_tiers?.length) {
+      const tierData = product.price_tiers.find((t: any) => t.tier === userTier);
+      if (tierData?.price_per_karton) return tierData.price_per_karton;
+      // fallback ke tier apapun yang ada
+      return product.price_tiers[0]?.price_per_karton || product.price || 0;
+    }
+    // legacy field mapping: reseller → price, agent → wholesale_price
+    if (userTier === 'agent' && product.wholesale_price) return product.wholesale_price;
+    return product.price || 0;
+  };
+
+  const displayPrice = getTierPrice();
+
+  // Harga tier lainnya untuk ditampilkan sebagai info
+  const otherTier = userTier === 'agent' ? 'reseller' : 'agent';
+  const otherTierPrice = product.price_tiers?.find((t: any) => t.tier === otherTier)?.price_per_karton;
 
   return (
     <Card className="overflow-hidden flex flex-col">
@@ -211,12 +249,13 @@ function ProductCard({
                 <p className="text-sm text-muted-foreground italic">Login untuk lihat harga</p>
               ) : (
                 <>
-                  {/* Harga Reseller (harga utama besar) */}
-                  <p className="text-lg font-bold text-primary">{formatCurrency(product.price || 0)}</p>
-                  {/* Harga Agent (grosir, tampil jika berbeda) */}
-                  {product.wholesale_price && product.wholesale_price !== product.price && (
+                  {/* Harga sesuai tier user */}
+                  <p className="text-lg font-bold text-primary">{formatCurrency(displayPrice)}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{userTier}</p>
+                  {/* Tampilkan harga tier lain sebagai info jika berbeda */}
+                  {otherTierPrice && otherTierPrice !== displayPrice && (
                     <p className="text-xs text-muted-foreground">
-                      Grosir: {formatCurrency(product.wholesale_price)}
+                      {otherTier === 'agent' ? 'Harga Agent' : 'Harga Reseller'}: {formatCurrency(otherTierPrice)}
                     </p>
                   )}
                 </>
