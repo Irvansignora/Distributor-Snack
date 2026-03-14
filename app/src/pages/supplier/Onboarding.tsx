@@ -35,6 +35,28 @@ const GMV_OPTIONS = [
 
 export default function Onboarding() {
   const { store, refreshStore } = useAuth() as any;
+
+  // Jika sudah approved, tidak perlu onboarding — arahkan ke dashboard
+  if (store?.status === 'approved') {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="max-w-md w-full text-center">
+          <CardContent className="p-8">
+            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="h-8 w-8 text-emerald-600" />
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Akun Sudah Aktif</h2>
+            <p className="text-muted-foreground mb-6">
+              Toko kamu sudah diverifikasi dan bisa langsung belanja.
+            </p>
+            <a href="/supplier/dashboard">
+              <Button className="w-full">Ke Dashboard</Button>
+            </a>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   const [step, setStep] = useState(store?.ktp_photo_url ? 3 : store?.store_name ? 2 : 1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
