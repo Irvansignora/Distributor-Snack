@@ -457,21 +457,31 @@ app.get('/api/admin/stores/:id', auth, requireRole(['admin','staff']), async (re
 app.patch('/api/admin/stores/:id/approve', auth, requireRole(['admin']), async (req, res) => {
   try {
     const { tier = 'reseller', credit_limit = 0, notes } = req.body;
-    const { data: store } = await supabase.from('customer_stores')
+
+    // Update store status dulu
+    const { data: store, error } = await supabase.from('customer_stores')
       .update({ status: 'approved', tier, credit_limit, reviewed_by: req.user.id, reviewed_at: new Date().toISOString(), notes })
       .eq('id', req.params.id)
-      .select('*, users!inner(id, name, phone)')
+      .select('*')
       .single();
+    if (error) throw error;
+    if (!store) throw new Error('Store tidak ditemukan');
 
-    await createNotification(store.users.id, 'store_approved',
-      '✅ Toko Disetujui!', `Toko ${store.store_name} telah diverifikasi. Tier: ${tier.toUpperCase()}`, { tier });
+    // Ambil user secara terpisah agar tidak crash jika join gagal
+    const { data: storeUser } = await supabase.from('users')
+      .select('id, name, phone').eq('id', store.user_id).single();
 
-    const waNum = store.whatsapp || store.users.phone;
-    if (waNum) {
-      await sendWhatsApp(waNum,
-        `Halo ${store.owner_name}! 🎉\n\nToko *${store.store_name}* telah berhasil diverifikasi di SnackHub.\n\nTier Anda: *${tier.toUpperCase()}*\nLimit Kredit: *Rp ${Number(credit_limit).toLocaleString('id-ID')}*\n\nSilakan login dan mulai berbelanja!\nhttps://snackhub.id`,
-        store.id
-      );
+    if (storeUser) {
+      await createNotification(storeUser.id, 'store_approved',
+        '✅ Toko Disetujui!', `Toko ${store.store_name} telah diverifikasi. Tier: ${tier.toUpperCase()}`, { tier });
+
+      const waNum = store.whatsapp || store.phone_store || storeUser.phone;
+      if (waNum) {
+        await sendWhatsApp(waNum,
+          `Halo ${store.owner_name}! 🎉\n\nToko *${store.store_name}* telah berhasil diverifikasi di SnackHub.\n\nTier Anda: *${tier.toUpperCase()}*\nLimit Kredit: *Rp ${Number(credit_limit).toLocaleString('id-ID')}*\n\nSilakan login dan mulai berbelanja!\nhttps://snackhub.id`,
+          store.id
+        );
+      }
     }
 
     await supabase.from('activity_log').insert({
@@ -489,21 +499,28 @@ app.patch('/api/admin/stores/:id/reject', auth, requireRole(['admin']), async (r
     const { reason } = req.body;
     if (!reason) return res.status(400).json({ error: 'Alasan penolakan wajib diisi' });
 
-    const { data: store } = await supabase.from('customer_stores')
+    const { data: store, error } = await supabase.from('customer_stores')
       .update({ status: 'rejected', rejection_reason: reason, reviewed_by: req.user.id, reviewed_at: new Date().toISOString() })
       .eq('id', req.params.id)
-      .select('*, users!inner(id, name, phone)')
+      .select('*')
       .single();
+    if (error) throw error;
+    if (!store) throw new Error('Store tidak ditemukan');
 
-    await createNotification(store.users.id, 'store_rejected',
-      '❌ Verifikasi Ditolak', `Alasan: ${reason}. Silakan perbaiki dan kirim ulang.`, { reason });
+    const { data: storeUser } = await supabase.from('users')
+      .select('id, name, phone').eq('id', store.user_id).single();
 
-    const waNum = store.whatsapp || store.users.phone;
-    if (waNum) {
-      await sendWhatsApp(waNum,
-        `Halo ${store.owner_name},\n\nMaaf, verifikasi toko *${store.store_name}* belum dapat kami setujui.\n\nAlasan: ${reason}\n\nSilakan perbaiki dokumen dan submit ulang di aplikasi SnackHub.`,
-        store.id
-      );
+    if (storeUser) {
+      await createNotification(storeUser.id, 'store_rejected',
+        '❌ Verifikasi Ditolak', `Alasan: ${reason}. Silakan perbaiki dan kirim ulang.`, { reason });
+
+      const waNum = store.whatsapp || store.phone_store || storeUser.phone;
+      if (waNum) {
+        await sendWhatsApp(waNum,
+          `Halo ${store.owner_name},\n\nMaaf, verifikasi toko *${store.store_name}* belum dapat kami setujui.\n\nAlasan: ${reason}\n\nSilakan perbaiki dokumen dan submit ulang di aplikasi SnackHub.`,
+          store.id
+        );
+      }
     }
 
     res.json({ message: 'Toko ditolak', store });
