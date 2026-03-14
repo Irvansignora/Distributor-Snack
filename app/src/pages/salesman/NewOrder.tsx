@@ -101,7 +101,7 @@ export default function SalesmanNewOrder() {
   });
 
   const store = storesData?.stores.find(s => s.id === selectedStoreId);
-  const storeTier = storeDetail?.store?.tier || 'bronze';
+  const storeTier = storeDetail?.store?.tier || 'reseller';
 
   const getProductPrice = (product: any) => {
     const tier = product.price_tiers?.find((t: any) => t.tier === storeTier);
