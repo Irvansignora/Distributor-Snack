@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { orderService } from '@/services/orders';
 import { useCart } from '@/hooks/useCart';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,9 +10,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import api from '@/services/api';
 import {
   ArrowLeft, Package, MapPin, CreditCard, CheckCircle, Loader2,
-  Banknote, Truck, HandCoins, Clock, AlertCircle,
+  Banknote, Truck, HandCoins, Clock, AlertCircle, Building2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -93,6 +94,20 @@ export default function Checkout() {
   const tax: number = location.state?.tax ?? 0;
   const grandTotal: number = location.state?.grandTotal ?? subtotal;
   const taxPercent: number = location.state?.taxPercent ?? 0;
+
+  // Fetch rekening bank DISTRIBUTOR dari settings publik
+  const { data: publicSettings } = useQuery({
+    queryKey: ['public-settings'],
+    queryFn: () => api.get('/settings/public').then(r => r.data.settings),
+    staleTime: 5 * 60 * 1000,
+  });
+  const bankAccounts: Array<{
+    bank_name: string;
+    account_number: string;
+    account_name: string;
+    is_primary?: boolean;
+  }> = publicSettings?.bank_accounts || [];
+  const primaryBank = bankAccounts.find(b => b.is_primary) || bankAccounts[0];
 
   const createOrderMutation = useMutation({
     mutationFn: orderService.createOrder,
@@ -180,7 +195,7 @@ export default function Checkout() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {/* Info tier badge */}
+              {/* Info tier */}
               <div className={cn(
                 'flex items-start gap-2 px-3 py-2.5 rounded-lg text-sm border',
                 userTier === 'agent'
@@ -213,7 +228,6 @@ export default function Checkout() {
                           : 'border-border hover:border-primary/50 hover:bg-muted/40'
                       )}
                     >
-                      {/* Radio */}
                       <div className={cn(
                         'mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all',
                         isSelected ? 'border-primary' : 'border-muted-foreground/40'
@@ -235,10 +249,7 @@ export default function Checkout() {
                             {method.label}
                           </span>
                           {method.badgeLabel && (
-                            <span className={cn(
-                              'text-[10px] font-semibold px-1.5 py-0.5 rounded-full',
-                              method.badgeColor
-                            )}>
+                            <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full', method.badgeColor)}>
                               {method.badgeLabel}
                             </span>
                           )}
@@ -258,13 +269,47 @@ export default function Checkout() {
                 )}
               </div>
 
-              {/* Info rekening toko (untuk transfer) */}
-              {paymentMethod === 'bank_transfer' && store?.bank_name && (
-                <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg text-sm space-y-0.5">
-                  <p className="font-semibold text-blue-800 dark:text-blue-300 text-xs uppercase tracking-wide mb-1">Rekening Toko Anda</p>
-                  <p className="text-blue-800 dark:text-blue-300 font-medium">{store.bank_name}</p>
-                  <p className="text-blue-700 dark:text-blue-400 font-mono">{store.bank_account_number}</p>
-                  <p className="text-blue-600 dark:text-blue-500 text-xs">a.n. {store.bank_account_name}</p>
+              {/* ── Info Rekening DISTRIBUTOR jika pilih transfer bank ── */}
+              {paymentMethod === 'bank_transfer' && (
+                <div className="mt-2 rounded-xl border border-blue-200 dark:border-blue-800 overflow-hidden">
+                  <div className="px-4 py-2.5 bg-blue-600 dark:bg-blue-900">
+                    <p className="text-white text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                      <Building2 className="h-3.5 w-3.5" />
+                      Rekening Tujuan Transfer
+                    </p>
+                  </div>
+                  {bankAccounts.length === 0 ? (
+                    <div className="px-4 py-3 bg-blue-50 dark:bg-blue-950/30 text-sm text-blue-700 dark:text-blue-400">
+                      Rekening belum dikonfigurasi. Hubungi admin.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-blue-100 dark:divide-blue-900">
+                      {bankAccounts.map((bank, idx) => (
+                        <div key={idx} className={cn(
+                          'px-4 py-3 bg-blue-50 dark:bg-blue-950/20',
+                          bank.is_primary && 'ring-1 ring-inset ring-blue-300 dark:ring-blue-700'
+                        )}>
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <p className="font-bold text-blue-900 dark:text-blue-200 text-sm">{bank.bank_name}</p>
+                            {bank.is_primary && (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-600 text-white">
+                                Utama
+                              </span>
+                            )}
+                          </div>
+                          <p className="font-mono text-lg font-bold text-blue-800 dark:text-blue-300 tracking-wider">
+                            {bank.account_number}
+                          </p>
+                          <p className="text-xs text-blue-600 dark:text-blue-500">a.n. {bank.account_name}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="px-4 py-2.5 bg-blue-50 dark:bg-blue-950/20 border-t border-blue-200 dark:border-blue-800">
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      Setelah transfer, upload bukti pembayaran di halaman pesanan.
+                    </p>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -333,6 +378,11 @@ export default function Checkout() {
                   <p className="font-medium text-sm">
                     {ALL_PAYMENT_METHODS.find(m => m.id === paymentMethod)?.label || paymentMethod}
                   </p>
+                  {paymentMethod === 'bank_transfer' && primaryBank && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {primaryBank.bank_name} — {primaryBank.account_number}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -342,11 +392,9 @@ export default function Checkout() {
                 size="lg"
                 disabled={createOrderMutation.isPending || availableMethods.length === 0}
               >
-                {createOrderMutation.isPending ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Memproses...</>
-                ) : (
-                  <><CheckCircle className="mr-2 h-4 w-4" />Buat Pesanan</>
-                )}
+                {createOrderMutation.isPending
+                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Memproses...</>
+                  : <><CheckCircle className="mr-2 h-4 w-4" />Buat Pesanan</>}
               </Button>
 
               <Button type="button" variant="outline" className="w-full" onClick={() => navigate('/supplier/cart')}>
