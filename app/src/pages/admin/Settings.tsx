@@ -10,7 +10,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTax } from '@/contexts/TaxContext';
 import api from '@/services/api';
-import { User, Bell, Shield, Store, Moon, Sun, Laptop, Loader2, Percent, TrendingUp } from 'lucide-react';
+import { User, Bell, Shield, Store, Moon, Sun, Laptop, Loader2, Percent, TrendingUp, Banknote, Plus, Trash2, Star } from 'lucide-react';
 import { toast } from 'sonner';
 
 // BUG-09 FIX: Settings.tsx terhubung ke API
@@ -147,6 +147,61 @@ export default function Settings() {
     }
   };
 
+  // --- Tab Pembayaran (Rekening Bank Distributor) ---
+  interface BankAccount {
+    bank_name: string;
+    account_number: string;
+    account_name: string;
+    is_primary: boolean;
+  }
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [bankSaving, setBankSaving] = useState(false);
+
+  // Load rekening bank dari settings saat settingsData ada
+  useEffect(() => {
+    if (settingsData?.bank_accounts) {
+      setBankAccounts(settingsData.bank_accounts as BankAccount[]);
+    }
+  }, [settingsData]);
+
+  const addBankAccount = () => {
+    setBankAccounts(prev => [...prev, { bank_name: '', account_number: '', account_name: '', is_primary: prev.length === 0 }]);
+  };
+
+  const removeBankAccount = (idx: number) => {
+    setBankAccounts(prev => {
+      const next = prev.filter((_, i) => i !== idx);
+      // Jika yang dihapus adalah primary, set yang pertama jadi primary
+      if (prev[idx].is_primary && next.length > 0) next[0].is_primary = true;
+      return next;
+    });
+  };
+
+  const setPrimaryBank = (idx: number) => {
+    setBankAccounts(prev => prev.map((b, i) => ({ ...b, is_primary: i === idx })));
+  };
+
+  const updateBankField = (idx: number, field: keyof BankAccount, value: string | boolean) => {
+    setBankAccounts(prev => prev.map((b, i) => i === idx ? { ...b, [field]: value } : b));
+  };
+
+  const handleSaveBankAccounts = async () => {
+    const invalid = bankAccounts.find(b => !b.bank_name || !b.account_number || !b.account_name);
+    if (invalid) {
+      toast.error('Lengkapi semua field rekening bank');
+      return;
+    }
+    setBankSaving(true);
+    try {
+      await api.patch('/settings/bank_accounts', { accounts: bankAccounts });
+      toast.success('Rekening bank distributor berhasil disimpan');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal menyimpan rekening bank');
+    } finally {
+      setBankSaving(false);
+    }
+  };
+
   const isAdmin = user?.role === 'admin';
 
   return (
@@ -157,7 +212,7 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="profile">
-        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-6' : 'grid-cols-4'} lg:w-auto`}>
+        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-7' : 'grid-cols-4'} lg:w-auto`}>
           <TabsTrigger value="profile">
             <User className="mr-2 h-4 w-4" />
             Profile
@@ -185,6 +240,12 @@ export default function Settings() {
             <TabsTrigger value="tier">
               <TrendingUp className="mr-2 h-4 w-4" />
               Tier Harga
+            </TabsTrigger>
+          )}
+          {isAdmin && (
+            <TabsTrigger value="payment">
+              <Banknote className="mr-2 h-4 w-4" />
+              Pembayaran
             </TabsTrigger>
           )}
         </TabsList>
@@ -464,6 +525,121 @@ export default function Settings() {
                       : 'Simpan & Terapkan'}
                   </Button>
                 </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* --- Tab Pembayaran --- */}
+        {isAdmin && (
+          <TabsContent value="payment" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Banknote className="h-5 w-5" />
+                  Rekening Bank Distributor
+                </CardTitle>
+                <CardDescription>
+                  Rekening ini ditampilkan ke customer saat mereka memilih metode Transfer Bank saat checkout.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {bankAccounts.length === 0 && (
+                  <div className="p-4 border border-dashed rounded-xl text-center text-muted-foreground text-sm">
+                    Belum ada rekening bank. Klik tombol di bawah untuk menambahkan.
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  {bankAccounts.map((bank, idx) => (
+                    <div key={idx} className={`p-4 rounded-xl border-2 space-y-3 ${bank.is_primary ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm">Rekening #{idx + 1}</span>
+                          {bank.is_primary && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary text-primary-foreground">
+                              UTAMA
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {!bank.is_primary && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPrimaryBank(idx)}
+                              className="h-7 text-xs gap-1"
+                            >
+                              <Star className="h-3 w-3" />
+                              Set Utama
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeBankAccount(idx)}
+                            className="h-7 text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">Nama Bank *</label>
+                          <input
+                            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            placeholder="BCA, Mandiri, BRI..."
+                            value={bank.bank_name}
+                            onChange={e => updateBankField(idx, 'bank_name', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">Nomor Rekening *</label>
+                          <input
+                            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-mono"
+                            placeholder="1234567890"
+                            value={bank.account_number}
+                            onChange={e => updateBankField(idx, 'account_number', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">Nama Pemilik *</label>
+                          <input
+                            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            placeholder="Nama sesuai rekening"
+                            value={bank.account_name}
+                            onChange={e => updateBankField(idx, 'account_name', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Button type="button" variant="outline" onClick={addBankAccount} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Tambah Rekening
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleSaveBankAccounts}
+                    disabled={bankSaving || bankAccounts.length === 0}
+                  >
+                    {bankSaving
+                      ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menyimpan...</>
+                      : <><Banknote className="mr-2 h-4 w-4" />Simpan Rekening Bank</>}
+                  </Button>
+                </div>
+
+                <p className="text-xs text-muted-foreground border-t pt-3">
+                  Rekening yang ditandai <strong>Utama</strong> akan ditampilkan paling atas saat customer checkout dengan Transfer Bank.
+                  Anda bisa menambahkan beberapa rekening dari bank berbeda.
+                </p>
               </CardContent>
             </Card>
           </TabsContent>
