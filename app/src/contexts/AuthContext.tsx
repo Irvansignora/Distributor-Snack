@@ -11,7 +11,7 @@ interface CustomerStore {
   store_name: string;
   owner_name?: string;
   status: 'draft' | 'pending_review' | 'approved' | 'rejected' | 'suspended';
-  tier?: 'bronze' | 'silver' | 'gold' | 'platinum';
+  tier?: 'agent' | 'reseller';
   credit_limit?: number;
   credit_used?: number;
   ktp_photo_url?: string;
