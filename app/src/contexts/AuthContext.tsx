@@ -20,9 +20,6 @@ interface CustomerStore {
   phone_store?: string;
   address_line?: string;
   store_type?: string;
-  bank_name?: string;
-  bank_account_number?: string;
-  bank_account_name?: string;
   allowed_payment_methods?: string[];
   [key: string]: unknown;
 }
