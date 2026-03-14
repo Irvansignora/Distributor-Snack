@@ -688,12 +688,49 @@ app.post('/api/suppliers', auth, requireRole(['admin']), async (req, res) => {
 
 app.get('/api/suppliers/:id', auth, requireRole(['admin','staff']), async (req, res) => {
   try {
-    const { data: store } = await supabase.from('v_stores_full').select('*').eq('id', req.params.id).single();
-    if (!store) return res.status(404).json({ error: 'Supplier not found' });
+    const lookupId = req.params.id;
 
+    // Coba by store.id dulu
+    let { data: store } = await supabase.from('v_stores_full').select('*').eq('id', lookupId).maybeSingle();
+
+    // Fallback: coba by user_id (untuk user yang ditambah admin tanpa onboarding)
+    if (!store) {
+      const { data: byUser } = await supabase.from('v_stores_full').select('*').eq('user_id', lookupId).maybeSingle();
+      store = byUser;
+    }
+
+    // Fallback terakhir: ambil dari tabel users langsung
+    if (!store) {
+      const { data: user } = await supabase.from('users')
+        .select('id, name, email, phone, created_at').eq('id', lookupId).maybeSingle();
+      if (!user) return res.status(404).json({ error: 'Supplier not found' });
+
+      return res.json({
+        supplier: {
+          id: user.id,
+          user_id: user.id,
+          store_name: user.name,
+          owner_name: user.name,
+          email: user.email,
+          phone: user.phone,
+          status: 'active',
+          tier: 'reseller',
+          credit_limit: 0,
+          credit_used: 0,
+          company_name: user.name,
+          current_credit: 0,
+          address: null,
+          created_at: user.created_at,
+        },
+        orders: [],
+        stats: { totalOrders: 0, totalSpent: 0, completedOrders: 0 },
+      });
+    }
+
+    const storeId = store.id;
     const { data: orders } = await supabase.from('orders')
       .select('id, order_number, status, total, created_at')
-      .eq('store_id', req.params.id)
+      .eq('store_id', storeId)
       .order('created_at', { ascending: false });
 
     const completed = orders?.filter(o => o.status === 'completed') || [];
