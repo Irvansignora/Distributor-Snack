@@ -95,10 +95,8 @@ CREATE TYPE store_status AS ENUM (
 
 -- Tier pelanggan (menentukan harga yang didapat)
 CREATE TYPE customer_tier AS ENUM (
-  'bronze',   -- toko kecil/baru, harga standar
-  'silver',   -- toko menengah, harga lebih murah
-  'gold',     -- toko besar/volume tinggi, harga terbaik
-  'platinum'  -- mitra distributor, harga khusus negosiasi
+  'agent',    -- pembelian bulanan >= threshold, harga agent
+  'reseller'  -- default, harga reseller
 );
 
 CREATE TABLE customer_stores (
@@ -133,7 +131,7 @@ CREATE TABLE customer_stores (
 
   -- Status & tier
   status            store_status   NOT NULL DEFAULT 'draft',
-  tier              customer_tier  NOT NULL DEFAULT 'bronze',
+  tier              customer_tier  NOT NULL DEFAULT 'reseller',
   rejection_reason  TEXT,             -- diisi admin jika rejected
   reviewed_by       UUID REFERENCES users(id),
   reviewed_at       TIMESTAMP WITH TIME ZONE,
@@ -689,10 +687,8 @@ CREATE TYPE promo_type AS ENUM (
 
 CREATE TYPE promo_target AS ENUM (
   'all',               -- semua toko
-  'tier_bronze',
-  'tier_silver',
-  'tier_gold',
-  'tier_platinum',
+  'tier_agent',
+  'tier_reseller',
   'specific_stores'    -- hanya toko tertentu (lihat promo_store_targets)
 );
 
