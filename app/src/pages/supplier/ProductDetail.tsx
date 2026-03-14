@@ -3,6 +3,7 @@ import { useParams, NavLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { productService } from '@/services/products';
 import { useCart } from '@/hooks/useCart';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,8 @@ import { cn } from '@/lib/utils';
 export default function SupplierProductDetail() {
   const { id } = useParams<{ id: string }>();
   const { addToCart } = useCart();
+  const { store } = useAuth();
+  const userTier: 'agent' | 'reseller' = (store?.tier as 'agent' | 'reseller') || 'reseller';
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
 
@@ -31,6 +34,16 @@ export default function SupplierProductDetail() {
     }).format(value || 0);
   };
 
+  const getTierPrice = (product: any): number => {
+    if (product.price_tiers?.length) {
+      const tierData = product.price_tiers.find((t: any) => t.tier === userTier);
+      if (tierData?.price_per_karton) return tierData.price_per_karton;
+      return product.price_tiers[0]?.price_per_karton || product.price || 0;
+    }
+    if (userTier === 'agent' && product.wholesale_price) return product.wholesale_price;
+    return product.price || 0;
+  };
+
   const handleAddToCart = () => {
     if (!data?.product) return;
     
@@ -38,8 +51,11 @@ export default function SupplierProductDetail() {
       toast.error(`Only ${data.product.stock_quantity} items available`);
       return;
     }
-    
-    addToCart(data.product, quantity);
+
+    // Inject harga tier yang benar agar cart total konsisten
+    const tierPrice = getTierPrice(data.product);
+    const productWithTierPrice = { ...data.product, price: tierPrice, wholesale_price: tierPrice };
+    addToCart(productWithTierPrice, quantity);
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
     toast.success('Added to cart');
@@ -56,6 +72,9 @@ export default function SupplierProductDetail() {
 
   const isOutOfStock = product.stock_quantity === 0;
   const isLowStock = product.stock_quantity <= product.reorder_level;
+  const displayPrice = getTierPrice(product);
+  const otherTier = userTier === 'agent' ? 'reseller' : 'agent';
+  const otherTierPrice = product.price_tiers?.find((t: any) => t.tier === otherTier)?.price_per_karton;
 
   return (
     <div className="space-y-6 p-4 lg:p-8">
@@ -111,11 +130,11 @@ export default function SupplierProductDetail() {
 
           <div className="space-y-4">
             <div>
-              <p className="text-sm text-muted-foreground">Wholesale Price</p>
-              <p className="text-3xl font-bold">{formatCurrency(product.wholesale_price || product.price)}</p>
-              {product.wholesale_price && product.wholesale_price < product.price && (
-                <p className="text-sm text-muted-foreground line-through">
-                  Retail: {formatCurrency(product.price)}
+              <p className="text-sm text-muted-foreground capitalize">Harga {userTier}</p>
+              <p className="text-3xl font-bold">{formatCurrency(displayPrice)}</p>
+              {otherTierPrice && otherTierPrice !== displayPrice && (
+                <p className="text-sm text-muted-foreground">
+                  Harga {otherTier}: {formatCurrency(otherTierPrice)}
                 </p>
               )}
             </div>
