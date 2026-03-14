@@ -43,14 +43,24 @@ export default function Orders() {
   const [status, setStatus] = useState<OrderStatus | 'all'>('all');
   const [page, setPage] = useState(1);
 
+  // Reset ke halaman 1 setiap kali search atau status berubah
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setPage(1);
+  };
+
+  const handleStatusChange = (value: OrderStatus | 'all') => {
+    setStatus(value);
+    setPage(1);
+  };
+
   const { data, isLoading } = useQuery({
     queryKey: ['orders', status, page, search],
     queryFn: () => orderService.getOrders({
       status: status === 'all' ? undefined : status,
       page,
       limit: 10,
-      // BUG-05 FIX: kirim search ke API
-      supplier_id: search || undefined,
+      search: search || undefined,
     }),
   });
 
@@ -106,11 +116,11 @@ export default function Orders() {
               <Input
                 placeholder="Cari pesanan..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="pl-10"
               />
             </div>
-            <Select value={status} onValueChange={(v) => setStatus(v as OrderStatus | 'all')}>
+            <Select value={status} onValueChange={(v) => handleStatusChange(v as OrderStatus | 'all')}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter status" />
               </SelectTrigger>
