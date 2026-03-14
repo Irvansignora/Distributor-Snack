@@ -350,11 +350,62 @@ app.get('/api/store/profile', auth, role('customer'), async (req, res) => {
 app.put('/api/store/profile', auth, role('customer'), async (req, res) => {
   try {
     const allowed = ['store_name','store_type','owner_name','phone_store','whatsapp',
-      'address_line','city_id','province_id','postal_code','monthly_gmv_estimate'];
+      'address_line','city_id','province_id','postal_code','monthly_gmv_estimate',
+      'bank_name','bank_account_number','bank_account_name'];
     const updates = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
     const { data, error } = await supabase.from('customer_stores').update(updates).eq('user_id', req.user.id).select().single();
     if (error) throw error;
     res.json({ store: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint: customer update bank account & request payment method (hanya yang diizinkan tier)
+app.patch('/api/store/payment-settings', auth, role('customer'), async (req, res) => {
+  try {
+    const { bank_name, bank_account_number, bank_account_name } = req.body;
+    const updates = {};
+    if (bank_name !== undefined) updates.bank_name = bank_name;
+    if (bank_account_number !== undefined) updates.bank_account_number = bank_account_number;
+    if (bank_account_name !== undefined) updates.bank_account_name = bank_account_name;
+
+    if (Object.keys(updates).length === 0)
+      return res.status(400).json({ error: 'Tidak ada data yang diperbarui' });
+
+    const { data, error } = await supabase
+      .from('customer_stores')
+      .update(updates)
+      .eq('user_id', req.user.id)
+      .select('bank_name,bank_account_number,bank_account_name,allowed_payment_methods,tier')
+      .single();
+    if (error) throw error;
+    res.json({ store: data, message: 'Pengaturan pembayaran berhasil disimpan' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint: admin update allowed_payment_methods per store
+app.patch('/api/admin/stores/:id/payment-methods', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { allowed_payment_methods } = req.body;
+    if (!Array.isArray(allowed_payment_methods))
+      return res.status(400).json({ error: 'allowed_payment_methods harus berupa array' });
+
+    const validMethods = ['bank_transfer','cod','consignment','top_14','top_30'];
+    const invalid = allowed_payment_methods.filter(m => !validMethods.includes(m));
+    if (invalid.length)
+      return res.status(400).json({ error: `Metode tidak valid: ${invalid.join(', ')}` });
+
+    const { data, error } = await supabase
+      .from('customer_stores')
+      .update({ allowed_payment_methods })
+      .eq('id', req.params.id)
+      .select('id,store_name,allowed_payment_methods,tier')
+      .single();
+    if (error) throw error;
+    res.json({ store: data, message: 'Metode pembayaran berhasil diperbarui' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -456,7 +507,12 @@ app.get('/api/admin/stores/:id', auth, requireRole(['admin','staff']), async (re
 
 app.patch('/api/admin/stores/:id/approve', auth, requireRole(['admin']), async (req, res) => {
   try {
-    const { tier = 'reseller', credit_limit = 0, notes } = req.body;
+    const { tier = 'reseller', credit_limit = 0, notes, allowed_payment_methods } = req.body;
+    // Default metode pembayaran berdasarkan tier
+    const defaultPaymentMethods = tier === 'agent'
+      ? ['bank_transfer','cod','consignment','top_14','top_30']
+      : ['bank_transfer','cod'];
+    const paymentMethods = allowed_payment_methods || defaultPaymentMethods;
 
     // Cari store: coba by store.id dulu, fallback by user_id
     const storeId = req.params.id;
@@ -481,6 +537,7 @@ app.patch('/api/admin/stores/:id/approve', auth, requireRole(['admin']), async (
             status: 'approved',
             tier,
             credit_limit,
+            allowed_payment_methods: paymentMethods,
           })
           .select('id').single();
         if (createErr) throw createErr;
@@ -492,7 +549,7 @@ app.patch('/api/admin/stores/:id/approve', auth, requireRole(['admin']), async (
 
     // Update store status
     const { data: store, error } = await supabase.from('customer_stores')
-      .update({ status: 'approved', tier, credit_limit, reviewed_by: req.user.id, reviewed_at: new Date().toISOString(), notes })
+      .update({ status: 'approved', tier, credit_limit, reviewed_by: req.user.id, reviewed_at: new Date().toISOString(), notes, allowed_payment_methods: paymentMethods })
       .eq('id', existingStore.id)
       .select('*')
       .single();
@@ -574,11 +631,20 @@ app.patch('/api/admin/stores/:id/reject', auth, requireRole(['admin']), async (r
 
 app.patch('/api/admin/stores/:id/tier', auth, requireRole(['admin']), async (req, res) => {
   try {
-    const { tier, credit_limit, credit_due_days } = req.body;
+    const { tier, credit_limit, credit_due_days, allowed_payment_methods } = req.body;
     const updates = {};
-    if (tier) updates.tier = tier;
+    if (tier) {
+      updates.tier = tier;
+      // Auto-update metode pembayaran saat tier berubah (kecuali sudah diset manual)
+      if (!allowed_payment_methods) {
+        updates.allowed_payment_methods = tier === 'agent'
+          ? ['bank_transfer','cod','consignment','top_14','top_30']
+          : ['bank_transfer','cod'];
+      }
+    }
     if (credit_limit !== undefined) updates.credit_limit = credit_limit;
     if (credit_due_days !== undefined) updates.credit_due_days = credit_due_days;
+    if (allowed_payment_methods) updates.allowed_payment_methods = allowed_payment_methods;
 
     const { data } = await supabase.from('customer_stores').update(updates).eq('id', req.params.id).select().single();
     await supabase.from('activity_log').insert({
@@ -1216,6 +1282,14 @@ app.post('/api/orders', auth, role('customer'), async (req, res) => {
     const { data: store } = await supabase.from('customer_stores').select('*').eq('user_id', req.user.id).single();
     if (!store || store.status !== 'approved')
       return res.status(403).json({ error: 'Toko belum diverifikasi. Selesaikan proses onboarding terlebih dahulu.' });
+
+    // Validasi metode pembayaran sesuai yang diizinkan untuk store ini
+    const allowedMethods = store.allowed_payment_methods || ['bank_transfer','cod'];
+    if (payment_method && !allowedMethods.includes(payment_method)) {
+      return res.status(400).json({
+        error: `Metode pembayaran '${payment_method}' tidak tersedia untuk akun Anda. Tersedia: ${allowedMethods.join(', ')}`
+      });
+    }
 
     let subtotal = 0;
     const orderItems = [];
