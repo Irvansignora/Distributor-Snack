@@ -1,40 +1,16 @@
 {
   "version": 2,
-  "name": "snacktrack-app",
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "headers": [
+  "name": "snacktrack-api",
+  "builds": [
     {
-      "source": "/assets/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
-    },
-    {
-      "source": "/index.html",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
-        { "key": "Pragma", "value": "no-cache" },
-        { "key": "Expires", "value": "0" }
-      ]
-    },
-    {
-      "source": "/sw.js",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
-      ]
-    },
-    {
-      "source": "/manifest.json",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache" }
-      ]
+      "src": "server.js",
+      "use": "@vercel/node"
     }
   ],
   "rewrites": [
     {
-      "source": "/((?!assets|icons|manifest\\.json|sw\\.js|.*\\..*).*)",
-      "destination": "/index.html"
+      "source": "/(.*)",
+      "destination": "/server.js"
     }
   ]
 }
