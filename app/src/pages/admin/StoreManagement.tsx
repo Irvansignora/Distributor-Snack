@@ -226,8 +226,8 @@ export default function StoreManagement() {
                     // BUG FIX: credit_limit bisa undefined/null — default ke 0
                     const creditLimit  = s.credit_limit  ?? 0;
                     const creditUsed   = s.credit_used   ?? s.current_credit ?? 0;
-                    // BUG FIX: detail link — gunakan store id (s.id) bukan user_id
-                    const detailId     = s.id;
+                    // detail link: pakai store id, fallback ke user_id untuk user tanpa store profile
+                    const detailId     = s.store_id || s.user_id || s.id;
 
                     return (
                       <tr key={s.id} className="border-b hover:bg-muted/30 transition-colors">
@@ -281,39 +281,35 @@ export default function StoreManagement() {
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex items-center justify-center gap-1">
+                            {/* Tombol Tolak: hanya untuk pending_review */}
                             {s.status === 'pending_review' && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="border-red-200 text-red-600 hover:bg-red-50 h-7 w-7 p-0"
-                                  onClick={() => { setRejectDialog(s); setRejectReason(''); }}
-                                  title="Tolak"
-                                >
-                                  <XCircle className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  className="bg-emerald-600 hover:bg-emerald-700 h-7 px-2 text-xs"
-                                  onClick={() => { setApproveDialog(s); setApproveData({ tier: 'reseller', credit_limit: '0', notes: '' }); }}
-                                >
-                                  <CheckCircle className="h-3.5 w-3.5 mr-1" />
-                                  Setujui
-                                </Button>
-                              </>
-                            )}
-                            {/* BUG FIX: link ke /suppliers/:id untuk yang punya store profile */}
-                            {s.id && s.status !== 'active' ? (
-                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
-                                <NavLink to={`/admin/suppliers/${detailId}`} title="Lihat detail">
-                                  <Eye className="h-3.5 w-3.5" />
-                                </NavLink>
-                              </Button>
-                            ) : (
-                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" disabled title="Belum ada profil toko">
-                                <Eye className="h-3.5 w-3.5 opacity-40" />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-red-200 text-red-600 hover:bg-red-50 h-7 w-7 p-0"
+                                onClick={() => { setRejectDialog(s); setRejectReason(''); }}
+                                title="Tolak"
+                              >
+                                <XCircle className="h-3.5 w-3.5" />
                               </Button>
                             )}
+                            {/* Tombol Setujui: semua status kecuali sudah approved/suspended */}
+                            {!['approved', 'suspended'].includes(s.status) && (
+                              <Button
+                                size="sm"
+                                className="bg-emerald-600 hover:bg-emerald-700 h-7 px-2 text-xs"
+                                onClick={() => { setApproveDialog(s); setApproveData({ tier: s.tier || 'reseller', credit_limit: String(s.credit_limit || 0), notes: '' }); }}
+                              >
+                                <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                                Setujui
+                              </Button>
+                            )}
+                            {/* Tombol Lihat: semua bisa diklik */}
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
+                              <NavLink to={`/admin/suppliers/${detailId}`} title="Lihat detail">
+                                <Eye className="h-3.5 w-3.5" />
+                              </NavLink>
+                            </Button>
                           </div>
                         </td>
                       </tr>
