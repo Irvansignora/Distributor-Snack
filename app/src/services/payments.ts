@@ -46,8 +46,12 @@ export const paymentService = {
     return response.data;
   },
 
-  async updateStatus(id: string, status: 'approved' | 'rejected', notes?: string): Promise<{ payment: Payment }> {
-    const response = await api.patch<{ payment: Payment }>(`/payments/${id}/status`, { status, notes });
+  async updateStatus(id: string, status: 'approved' | 'rejected', notes?: string): Promise<{ message: string }> {
+    // Pakai endpoint /verify yang menangani kredit, partial payment, dan notifikasi WA
+    const response = await api.patch<{ message: string }>(`/payments/${id}/verify`, {
+      action: status === 'approved' ? 'verify' : 'reject',
+      rejection_reason: notes,
+    });
     return response.data;
   },
 };
