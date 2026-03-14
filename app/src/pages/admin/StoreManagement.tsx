@@ -43,7 +43,22 @@ export default function StoreManagement() {
   const [rejectDialog, setRejectDialog]   = useState<any>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
 
-  const [approveData, setApproveData] = useState({ tier: 'reseller', credit_limit: '0', notes: '' });
+  const ALL_PAYMENT_METHODS = ['bank_transfer','cod','consignment','top_14','top_30'] as const;
+  const PAYMENT_METHOD_LABELS: Record<string, string> = {
+    bank_transfer: 'Transfer Bank',
+    cod: 'COD — Bayar di Tempat',
+    consignment: 'Konsinyasi',
+    top_14: 'TOP 14 Hari',
+    top_30: 'TOP 30 Hari',
+  };
+  const AGENT_ONLY_METHODS = ['consignment','top_14','top_30'];
+
+  const [approveData, setApproveData] = useState({
+    tier: 'reseller',
+    credit_limit: '0',
+    notes: '',
+    allowed_payment_methods: ['bank_transfer', 'cod'] as string[],
+  });
   const [rejectReason, setRejectReason] = useState('');
   const [addForm, setAddForm] = useState({ name: '', email: '', password: '', company_name: '', phone: '' });
 
@@ -302,7 +317,17 @@ export default function StoreManagement() {
                                 onClick={() => {
                                   // Kirim store_id (dari v_stores_full) atau user_id sebagai fallback
                                   setApproveDialog({ ...s, _approveId: s.id });
-                                  setApproveData({ tier: s.tier || 'reseller', credit_limit: String(s.credit_limit || 0), notes: '' });
+                                  const storeTier = s.tier || 'reseller';
+                                  setApproveData({
+                                    tier: storeTier,
+                                    credit_limit: String(s.credit_limit || 0),
+                                    notes: '',
+                                    allowed_payment_methods: s.allowed_payment_methods?.length
+                                      ? s.allowed_payment_methods
+                                      : (storeTier === 'agent'
+                                        ? ['bank_transfer','cod','consignment','top_14','top_30']
+                                        : ['bank_transfer','cod']),
+                                  });
                                 }}
                               >
                                 <CheckCircle className="h-3.5 w-3.5 mr-1" />
@@ -417,7 +442,14 @@ export default function StoreManagement() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Tier Pelanggan</Label>
-              <Select value={approveData.tier} onValueChange={v => setApproveData(p => ({ ...p, tier: v }))}>
+              <Select value={approveData.tier} onValueChange={v => setApproveData(p => ({
+                ...p,
+                tier: v,
+                // Auto-reset payment methods saat tier berubah
+                allowed_payment_methods: v === 'agent'
+                  ? ['bank_transfer','cod','consignment','top_14','top_30']
+                  : ['bank_transfer','cod'],
+              }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {Object.entries(TIER_CONFIG).map(([v, c]) => (
@@ -448,6 +480,51 @@ export default function StoreManagement() {
                 rows={2}
               />
             </div>
+
+            {/* Metode Pembayaran */}
+            <div className="space-y-2">
+              <Label>Metode Pembayaran Diizinkan</Label>
+              <p className="text-xs text-muted-foreground">
+                Reseller: Transfer Bank & COD. Agent: semua metode tersedia.
+              </p>
+              <div className="space-y-1.5">
+                {ALL_PAYMENT_METHODS.map(method => {
+                  const isChecked = approveData.allowed_payment_methods.includes(method);
+                  const isAgentOnly = AGENT_ONLY_METHODS.includes(method);
+                  const isDisabled = isAgentOnly && approveData.tier !== 'agent';
+                  return (
+                    <label
+                      key={method}
+                      className={cn('flex items-center gap-2 cursor-pointer p-2 rounded-lg border text-sm',
+                        isChecked ? 'bg-primary/5 border-primary/30' : 'border-border',
+                        isDisabled ? 'opacity-40 cursor-not-allowed' : ''
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        className="rounded"
+                        checked={isChecked}
+                        disabled={isDisabled}
+                        onChange={(e) => {
+                          setApproveData(p => ({
+                            ...p,
+                            allowed_payment_methods: e.target.checked
+                              ? [...p.allowed_payment_methods, method]
+                              : p.allowed_payment_methods.filter(m => m !== method),
+                          }));
+                        }}
+                      />
+                      <span className="font-medium">{PAYMENT_METHOD_LABELS[method]}</span>
+                      {isAgentOnly && (
+                        <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                          Agent
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setApproveDialog(null)}>Batal</Button>
@@ -458,6 +535,7 @@ export default function StoreManagement() {
                 tier: approveData.tier,
                 credit_limit: Number(approveData.credit_limit),
                 notes: approveData.notes,
+                allowed_payment_methods: approveData.allowed_payment_methods,
               })}
               disabled={approveMutation.isPending}
             >
