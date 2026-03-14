@@ -196,13 +196,13 @@ app.post('/api/auth/register',
         .single();
       if (error) throw error;
 
-      // Auto-create empty store profile
+      // Auto-create store profile — langsung approved, tidak perlu onboarding
       const { data: store } = await supabase.from('customer_stores').insert({
         user_id: user.id,
         store_name: company_name || name,
         owner_name: name,
-        status: 'draft',
-        tier: 'bronze',
+        status: 'approved',
+        tier: 'reseller',
       }).select().single();
 
       // Notify admins
@@ -456,7 +456,7 @@ app.get('/api/admin/stores/:id', auth, requireRole(['admin','staff']), async (re
 
 app.patch('/api/admin/stores/:id/approve', auth, requireRole(['admin']), async (req, res) => {
   try {
-    const { tier = 'bronze', credit_limit = 0, notes } = req.body;
+    const { tier = 'reseller', credit_limit = 0, notes } = req.body;
     const { data: store } = await supabase.from('customer_stores')
       .update({ status: 'approved', tier, credit_limit, reviewed_by: req.user.id, reviewed_at: new Date().toISOString(), notes })
       .eq('id', req.params.id)
@@ -564,7 +564,7 @@ app.get('/api/suppliers', auth, requireRole(['admin','staff']), async (req, res)
         email: u.email,
         phone: u.phone,
         status: 'active',
-        tier: 'bronze',
+        tier: 'reseller',
         credit_limit: 0,
         credit_used: 0,
         created_at: u.created_at,
@@ -617,7 +617,7 @@ app.post('/api/suppliers', auth, requireRole(['admin']), async (req, res) => {
       store_name: company_name || name,
       owner_name: name,
       status: 'active',
-      tier: 'bronze',
+      tier: 'reseller',
     });
 
     res.status(201).json({ supplier: user });
@@ -677,8 +677,8 @@ app.get('/api/products/public', async (req, res) => {
       .limit(8);
     if (error) throw error;
     const products = (data || []).map(p => {
-      const bronze = p.price_tiers?.find(t => t.tier === 'bronze');
-      return { ...p, price: bronze?.price_per_karton || null, price_tiers: undefined };
+      const reseller = p.price_tiers?.find(t => t.tier === 'reseller') || p.price_tiers?.[0];
+      return { ...p, price: reseller?.price_per_karton || null, price_tiers: undefined };
     });
     res.json({ products });
   } catch (e) {
@@ -741,13 +741,13 @@ app.get('/api/products', auth, async (req, res) => {
     if (req.user.role === 'customer') {
       const { data: store } = await supabase.from('customer_stores').select('tier,status').eq('user_id', req.user.id).single();
       storeApproved = store?.status === 'approved';
-      customerTier = store?.tier || 'bronze';
+      customerTier = store?.tier || 'reseller';
     } else {
       storeApproved = true;
-      customerTier = 'bronze'; // admin: tampilkan harga bronze sebagai referensi
+      customerTier = 'reseller'; // admin: tampilkan harga reseller sebagai referensi
     }
 
-    const TIER_ORDER = ['bronze', 'silver', 'gold', 'platinum'];
+    const TIER_ORDER = ['agent', 'reseller'];
     const products = (data || []).map(p => {
       // Cari harga sesuai tier, fallback ke tier lain yang tersedia
       let tierPrice = p.price_tiers?.find(t => t.tier === customerTier);
@@ -1274,7 +1274,7 @@ app.patch('/api/orders/:id/status', auth, requireRole(['admin','staff']), async 
     if (status === 'packing')    { updates.packed_at = now; updates.packed_by = req.user.id; }
     if (status === 'shipped')      updates.shipped_at = now;
     if (status === 'delivered')    updates.delivered_at = now;
-    if (status === 'completed')    updates.payment_status = 'paid';
+    if (status === 'completed')  { updates.payment_status = 'paid'; setImmediate(recalculateAllTiers); }
     if (status === 'cancelled')  { updates.cancelled_at = now; updates.cancelled_by = req.user.id; updates.cancel_reason = notes; }
 
     const { data: order, error } = await supabase.from('orders').update(updates).eq('id', req.params.id)
@@ -1478,10 +1478,8 @@ app.get('/api/dashboard/stats', auth, requireRole(['admin','staff']), async (req
       low_stock: lowStockCount,
       total_outstanding_credit: totalOutstanding,
       store_tiers: {
-        bronze: storesData.data?.filter(s => s.tier === 'bronze').length || 0,
-        silver: storesData.data?.filter(s => s.tier === 'silver').length || 0,
-        gold: storesData.data?.filter(s => s.tier === 'gold').length || 0,
-        platinum: storesData.data?.filter(s => s.tier === 'platinum').length || 0,
+        agent:    storesData.data?.filter(s => s.tier === 'agent').length || 0,
+        reseller: storesData.data?.filter(s => s.tier === 'reseller').length || 0,
       },
     });
   } catch (e) {
@@ -1697,6 +1695,52 @@ app.post('/api/saved-carts', auth, role('customer'), async (req, res) => {
 // ════════════════════════════════════════════════════════════════
 // SETTINGS
 // ════════════════════════════════════════════════════════════════
+
+// ── Helper: hitung ulang tier semua toko berdasarkan order bulan ini ─────────
+async function recalculateAllTiers() {
+  try {
+    const { data: thresholds } = await supabase.from('settings')
+      .select('key,value').in('key', ['tier_agent_min', 'tier_reseller_min']);
+    const tMap = {};
+    for (const t of thresholds || []) tMap[t.key] = (t.value?.value ?? t.value?.amount ?? 0);
+    const agentMin = Number(tMap['tier_agent_min']) || 0;
+    if (agentMin === 0) return; // belum dikonfigurasi, skip
+
+    const { data: stores } = await supabase.from('customer_stores')
+      .select('id').eq('status', 'approved');
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    for (const store of stores || []) {
+      const { data: orders } = await supabase.from('orders')
+        .select('total').eq('store_id', store.id)
+        .gte('created_at', startOfMonth)
+        .not('status', 'eq', 'cancelled');
+      const monthlyTotal = (orders || []).reduce((s, o) => s + (Number(o.total) || 0), 0);
+      const newTier = monthlyTotal >= agentMin ? 'agent' : 'reseller';
+      await supabase.from('customer_stores').update({ tier: newTier }).eq('id', store.id);
+    }
+  } catch (e) {
+    console.error('recalculateAllTiers error:', e.message);
+  }
+}
+
+// Endpoint: simpan threshold tier agent & reseller, lalu recalculate semua toko
+app.patch('/api/settings/tier_thresholds', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { agent_min } = req.body;
+    if (agent_min === undefined || agent_min === null) {
+      return res.status(400).json({ error: 'agent_min wajib diisi' });
+    }
+    await supabase.from('settings').upsert([
+      { key: 'tier_agent_min', value: { value: Number(agent_min) }, description: 'Min. pembelian bulanan untuk tier Agent (Rp)', updated_by: req.user.id },
+    ], { onConflict: 'key' });
+    await recalculateAllTiers();
+    res.json({ message: 'Threshold tier berhasil disimpan dan tier toko diperbarui' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.get('/api/settings', auth, requireRole(['admin']), async (req, res) => {
   const { data } = await supabase.from('settings').select('*');
