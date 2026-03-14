@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import {
   User, Building2, Mail, Phone, MapPin, Lock, Bell, Loader2,
-  Banknote, CreditCard, CheckCircle2, ShieldCheck, Truck, HandCoins, Clock,
+  Banknote, ShieldCheck, Truck, HandCoins, Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import api from '@/services/api';
@@ -31,7 +31,7 @@ const PAYMENT_METHOD_DEFS: PaymentMethodInfo[] = [
 ];
 
 export default function Profile() {
-  const { user, updateUser, store, refreshStore } = useAuth();
+  const { user, updateUser, store } = useAuth();
   const userTier = store?.tier || 'reseller';
 
   const [isEditing, setIsEditing] = useState(false);
