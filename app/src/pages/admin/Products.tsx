@@ -238,8 +238,8 @@ function ProductCard({
   const isLowStock = product.stock_quantity <= product.reorder_level;
   const isOutOfStock = product.stock_quantity === 0;
 
-  // Ambil harga: pakai price (legacy) kalau ada, fallback ke price_tiers bronze
-  const TIER_ORDER = ['bronze', 'silver', 'gold', 'platinum'];
+  // Ambil harga: pakai price (legacy) kalau ada, fallback ke price_tiers reseller → agent
+  const TIER_ORDER = ['reseller', 'agent'];
   const displayPrice = product.price || (() => {
     if (!product.price_tiers?.length) return 0;
     const tier = TIER_ORDER.map(t => product.price_tiers?.find((pt: any) => pt.tier === t)).find(Boolean);
