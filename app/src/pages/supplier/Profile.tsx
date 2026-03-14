@@ -5,16 +5,45 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { User, Building2, Mail, Phone, MapPin, Lock, Bell, Loader2 } from 'lucide-react';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  User, Building2, Mail, Phone, MapPin, Lock, Bell, Loader2,
+  Banknote, CreditCard, CheckCircle2, ShieldCheck, Truck, HandCoins, Clock,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 import api from '@/services/api';
 import { toast } from 'sonner';
 
+const BANK_OPTIONS = [
+  'BCA', 'Mandiri', 'BRI', 'BNI', 'BSI', 'CIMB Niaga', 'Danamon',
+  'Permata', 'BTN', 'Maybank', 'OCBC', 'Panin', 'Lainnya',
+];
+
+interface PaymentMethodInfo {
+  id: string;
+  label: string;
+  desc: string;
+  icon: React.ElementType;
+  agentOnly: boolean;
+}
+
+const PAYMENT_METHOD_DEFS: PaymentMethodInfo[] = [
+  { id: 'bank_transfer', label: 'Transfer Bank', desc: 'Transfer ke rekening distributor', icon: Banknote, agentOnly: false },
+  { id: 'cod', label: 'COD — Bayar di Tempat', desc: 'Bayar tunai saat barang diterima', icon: Truck, agentOnly: false },
+  { id: 'consignment', label: 'Konsinyasi', desc: 'Bayar setelah barang terjual', icon: HandCoins, agentOnly: true },
+  { id: 'top_14', label: 'TOP 14 Hari', desc: 'Term of Payment — bayar 14 hari setelah terima', icon: Clock, agentOnly: true },
+  { id: 'top_30', label: 'TOP 30 Hari', desc: 'Term of Payment — bayar 30 hari setelah terima', icon: Clock, agentOnly: true },
+];
+
 export default function Profile() {
-  const { user, updateUser, store } = useAuth();
+  const { user, updateUser, store, refreshStore } = useAuth();
+  const userTier = store?.tier || 'reseller';
+
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // BUG FIX: gunakan controlled state, bukan defaultValue (uncontrolled)
   const [profileForm, setProfileForm] = useState({
     name: user?.name || '',
     company_name: user?.company_name || '',
@@ -22,7 +51,6 @@ export default function Profile() {
     address: user?.address || '',
   });
 
-  // BUG FIX: password form dengan state terkontrol
   const [pwForm, setPwForm] = useState({
     current_password: '',
     new_password: '',
@@ -30,7 +58,14 @@ export default function Profile() {
   });
   const [pwSaving, setPwSaving] = useState(false);
 
-  // BUG FIX: Save Changes sekarang benar-benar memanggil API
+  // Bank account form
+  const [bankForm, setBankForm] = useState({
+    bank_name: store?.bank_name || '',
+    bank_account_number: store?.bank_account_number || '',
+    bank_account_name: store?.bank_account_name || '',
+  });
+  const [bankSaving, setBankSaving] = useState(false);
+
   const handleSaveProfile = async () => {
     setIsSaving(true);
     try {
@@ -51,7 +86,6 @@ export default function Profile() {
   };
 
   const handleCancelEdit = () => {
-    // Reset form ke nilai user saat ini saat cancel
     setProfileForm({
       name: user?.name || '',
       company_name: user?.company_name || '',
@@ -61,7 +95,6 @@ export default function Profile() {
     setIsEditing(false);
   };
 
-  // BUG FIX: Change Password sekarang memanggil API
   const handleChangePassword = async () => {
     if (pwForm.new_password !== pwForm.confirm_password) {
       toast.error('Konfirmasi password tidak cocok');
@@ -86,41 +119,71 @@ export default function Profile() {
     }
   };
 
+  const handleSaveBankAccount = async () => {
+    if (!bankForm.bank_name) { toast.error('Pilih nama bank'); return; }
+    if (!bankForm.bank_account_number.trim()) { toast.error('Nomor rekening wajib diisi'); return; }
+    if (!bankForm.bank_account_name.trim()) { toast.error('Nama pemilik rekening wajib diisi'); return; }
+
+    setBankSaving(true);
+    try {
+      await api.patch('/store/payment-settings', {
+        bank_name: bankForm.bank_name,
+        bank_account_number: bankForm.bank_account_number,
+        bank_account_name: bankForm.bank_account_name,
+      });
+      await refreshStore();
+      toast.success('Rekening bank berhasil disimpan');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal menyimpan rekening bank');
+    } finally {
+      setBankSaving(false);
+    }
+  };
+
+  // Metode pembayaran yang diizinkan untuk tier ini
+  const allowedMethods = store?.allowed_payment_methods || ['bank_transfer', 'cod'];
+  const visibleMethods = userTier === 'agent'
+    ? PAYMENT_METHOD_DEFS
+    : PAYMENT_METHOD_DEFS.filter(m => !m.agentOnly);
+
   return (
     <div className="space-y-6 p-4 lg:p-8">
       <div>
-        <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">My Profile</h1>
-        <p className="text-muted-foreground">Manage your account information</p>
+        <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Profil Saya</h1>
+        <p className="text-muted-foreground">Kelola informasi akun dan pengaturan toko</p>
       </div>
 
       <Tabs defaultValue="profile">
-        <TabsList className="grid w-full grid-cols-3 lg:w-auto">
+        <TabsList className="grid w-full grid-cols-4 lg:w-auto">
           <TabsTrigger value="profile">
             <User className="mr-2 h-4 w-4" />
-            Profile
+            <span className="hidden sm:inline">Profil</span>
+          </TabsTrigger>
+          <TabsTrigger value="payment">
+            <Banknote className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Pembayaran</span>
           </TabsTrigger>
           <TabsTrigger value="security">
             <Lock className="mr-2 h-4 w-4" />
-            Security
+            <span className="hidden sm:inline">Keamanan</span>
           </TabsTrigger>
           <TabsTrigger value="notifications">
             <Bell className="mr-2 h-4 w-4" />
-            Notifications
+            <span className="hidden sm:inline">Notifikasi</span>
           </TabsTrigger>
         </TabsList>
 
+        {/* ── TAB PROFIL ── */}
         <TabsContent value="profile" className="space-y-6">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Company Information</CardTitle>
-                  <CardDescription>Your business details</CardDescription>
+                  <CardTitle>Informasi Perusahaan</CardTitle>
+                  <CardDescription>Detail bisnis dan kontak Anda</CardDescription>
                 </div>
                 {!isEditing && (
-                  <Button variant="outline" onClick={() => setIsEditing(true)}>
-                    Edit
-                  </Button>
+                  <Button variant="outline" onClick={() => setIsEditing(true)}>Edit</Button>
                 )}
               </div>
             </CardHeader>
@@ -133,11 +196,12 @@ export default function Profile() {
                   <p className="font-semibold text-lg">{user?.company_name || user?.name}</p>
                   <p className="text-sm text-muted-foreground">{user?.email}</p>
                   {store?.tier && (
-                    <span className={`inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                    <span className={cn(
+                      'inline-flex items-center mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold',
                       store.tier === 'agent'
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'bg-amber-100 text-amber-700'
-                    }`}>
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400'
+                    )}>
                       {store.tier === 'agent' ? '⭐ Agent' : 'Reseller'}
                     </span>
                   )}
@@ -148,8 +212,7 @@ export default function Profile() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">
-                      <User className="inline h-4 w-4 mr-1" />
-                      Contact Name
+                      <User className="inline h-4 w-4 mr-1" />Nama Kontak
                     </Label>
                     <Input
                       id="name"
@@ -160,8 +223,7 @@ export default function Profile() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="company">
-                      <Building2 className="inline h-4 w-4 mr-1" />
-                      Company Name
+                      <Building2 className="inline h-4 w-4 mr-1" />Nama Perusahaan
                     </Label>
                     <Input
                       id="company"
@@ -173,16 +235,14 @@ export default function Profile() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">
-                    <Mail className="inline h-4 w-4 mr-1" />
-                    Email Address
+                    <Mail className="inline h-4 w-4 mr-1" />Email
                   </Label>
                   <Input id="email" type="email" value={user?.email || ''} disabled />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="phone">
-                      <Phone className="inline h-4 w-4 mr-1" />
-                      Phone Number
+                      <Phone className="inline h-4 w-4 mr-1" />No. Telepon
                     </Label>
                     <Input
                       id="phone"
@@ -193,8 +253,7 @@ export default function Profile() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="address">
-                      <MapPin className="inline h-4 w-4 mr-1" />
-                      Address
+                      <MapPin className="inline h-4 w-4 mr-1" />Alamat
                     </Label>
                     <Input
                       id="address"
@@ -209,26 +268,180 @@ export default function Profile() {
               {isEditing && (
                 <div className="flex gap-2">
                   <Button onClick={handleSaveProfile} disabled={isSaving}>
-                    {isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menyimpan...</> : 'Save Changes'}
+                    {isSaving
+                      ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menyimpan...</>
+                      : 'Simpan Perubahan'}
                   </Button>
-                  <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
-                    Cancel
-                  </Button>
+                  <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>Batal</Button>
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* ── TAB PEMBAYARAN ── */}
+        <TabsContent value="payment" className="space-y-6">
+
+          {/* Rekening Bank */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Rekening Bank
+              </CardTitle>
+              <CardDescription>
+                Nomor rekening digunakan untuk keperluan refund dan identitas toko
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Status rekening */}
+              {store?.bank_account_number ? (
+                <div className="flex items-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg text-sm">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium text-emerald-800 dark:text-emerald-300">Rekening sudah tersimpan</p>
+                    <p className="text-emerald-700 dark:text-emerald-400">
+                      {store.bank_name} — {store.bank_account_number} (a.n. {store.bank_account_name})
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-sm">
+                  <Banknote className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                  <p className="text-amber-800 dark:text-amber-300">Belum ada rekening bank yang disimpan</p>
+                </div>
+              )}
+
+              <div className="grid gap-4">
+                <div className="space-y-2">
+                  <Label>Nama Bank *</Label>
+                  <Select
+                    value={bankForm.bank_name}
+                    onValueChange={(v) => setBankForm(p => ({ ...p, bank_name: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih bank..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BANK_OPTIONS.map(bank => (
+                        <SelectItem key={bank} value={bank}>{bank}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="account-number">Nomor Rekening *</Label>
+                  <Input
+                    id="account-number"
+                    value={bankForm.bank_account_number}
+                    onChange={(e) => setBankForm(p => ({ ...p, bank_account_number: e.target.value }))}
+                    placeholder="Contoh: 1234567890"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="account-name">Nama Pemilik Rekening *</Label>
+                  <Input
+                    id="account-name"
+                    value={bankForm.bank_account_name}
+                    onChange={(e) => setBankForm(p => ({ ...p, bank_account_name: e.target.value }))}
+                    placeholder="Sesuai nama di buku tabungan"
+                  />
+                </div>
+              </div>
+
+              <Button onClick={handleSaveBankAccount} disabled={bankSaving}>
+                {bankSaving
+                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menyimpan...</>
+                  : <><Banknote className="mr-2 h-4 w-4" />Simpan Rekening Bank</>}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Metode Pembayaran Tersedia */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5" />
+                Metode Pembayaran
+              </CardTitle>
+              <CardDescription>
+                Metode pembayaran yang bisa Anda gunakan saat checkout.
+                {userTier === 'reseller' && (
+                  <span className="block mt-1 text-amber-600 dark:text-amber-400">
+                    Upgrade ke Agent untuk mengakses Konsinyasi & Term of Payment.
+                  </span>
+                )}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {visibleMethods.map((method) => {
+                  const Icon = method.icon;
+                  const isEnabled = allowedMethods.includes(method.id);
+                  const isAgentFeature = method.agentOnly;
+
+                  return (
+                    <div
+                      key={method.id}
+                      className={cn(
+                        'flex items-center gap-3 p-3.5 rounded-xl border',
+                        isEnabled
+                          ? 'border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-800'
+                          : 'border-border bg-muted/30 opacity-60'
+                      )}
+                    >
+                      <Icon className={cn(
+                        'h-5 w-5 flex-shrink-0',
+                        isEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'
+                      )} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className={cn(
+                            'font-medium text-sm',
+                            isEnabled ? 'text-emerald-800 dark:text-emerald-300' : 'text-muted-foreground'
+                          )}>
+                            {method.label}
+                          </p>
+                          {isAgentFeature && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-400">
+                              Agent
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{method.desc}</p>
+                      </div>
+                      <div className={cn(
+                        'flex-shrink-0 text-xs font-semibold px-2 py-1 rounded-full',
+                        isEnabled
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-400'
+                          : 'bg-muted text-muted-foreground'
+                      )}>
+                        {isEnabled ? 'Aktif' : 'Tidak Aktif'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className="text-xs text-muted-foreground mt-4">
+                Metode pembayaran diatur oleh admin. Hubungi admin jika ingin mengubah akses metode pembayaran.
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── TAB KEAMANAN ── */}
         <TabsContent value="security" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Change Password</CardTitle>
-              <CardDescription>Update your password to keep your account secure</CardDescription>
+              <CardTitle>Ganti Password</CardTitle>
+              <CardDescription>Perbarui password untuk keamanan akun Anda</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="current">Current Password</Label>
+                <Label htmlFor="current">Password Saat Ini</Label>
                 <Input
                   id="current"
                   type="password"
@@ -237,7 +450,7 @@ export default function Profile() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="new">New Password</Label>
+                <Label htmlFor="new">Password Baru</Label>
                 <Input
                   id="new"
                   type="password"
@@ -246,7 +459,7 @@ export default function Profile() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="confirm">Confirm New Password</Label>
+                <Label htmlFor="confirm">Konfirmasi Password Baru</Label>
                 <Input
                   id="confirm"
                   type="password"
@@ -255,40 +468,35 @@ export default function Profile() {
                 />
               </div>
               <Button onClick={handleChangePassword} disabled={pwSaving}>
-                {pwSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Mengubah...</> : 'Update Password'}
+                {pwSaving
+                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Mengubah...</>
+                  : 'Update Password'}
               </Button>
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* ── TAB NOTIFIKASI ── */}
         <TabsContent value="notifications" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-              <CardDescription>Choose what notifications you want to receive</CardDescription>
+              <CardTitle>Preferensi Notifikasi</CardTitle>
+              <CardDescription>Pilih notifikasi yang ingin Anda terima</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Order Updates</p>
-                  <p className="text-sm text-muted-foreground">Get notified when your order status changes</p>
+              {[
+                { label: 'Update Status Pesanan', desc: 'Notifikasi saat status pesanan berubah' },
+                { label: 'Konfirmasi Pembayaran', desc: 'Notifikasi saat pembayaran diverifikasi' },
+                { label: 'Email Promosi', desc: 'Terima penawaran dan promo menarik' },
+              ].map(item => (
+                <div key={item.label} className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{item.label}</p>
+                    <p className="text-sm text-muted-foreground">{item.desc}</p>
+                  </div>
+                  <Button variant="ghost" size="sm">Aktif</Button>
                 </div>
-                <Button variant="ghost" size="sm">Enabled</Button>
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Payment Confirmations</p>
-                  <p className="text-sm text-muted-foreground">Get notified about payment updates</p>
-                </div>
-                <Button variant="ghost" size="sm">Enabled</Button>
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Promotional Emails</p>
-                  <p className="text-sm text-muted-foreground">Receive offers and promotions</p>
-                </div>
-                <Button variant="ghost" size="sm">Disabled</Button>
-              </div>
+              ))}
             </CardContent>
           </Card>
         </TabsContent>
