@@ -22,7 +22,6 @@ import Payments from '@/pages/admin/Payments';
 import Reports from '@/pages/admin/Reports';
 import Settings from '@/pages/admin/Settings';
 import LandingSettings from '@/pages/admin/LandingSettings';
-import Suppliers from '@/pages/admin/Suppliers';
 import SupplierDetail from '@/pages/admin/SupplierDetail';
 
 import SupplierLayout from '@/layouts/SupplierLayout';
@@ -74,12 +73,14 @@ function App() {
                 <Route path="orders" element={<Orders />} />
                 <Route path="orders/:id" element={<OrderDetail />} />
                 <Route path="stores" element={<StoreManagement />} />
+                <Route path="stores/:id" element={<SupplierDetail />} />
                 <Route path="payments" element={<Payments />} />
                 <Route path="reports" element={<Reports />} />
                 <Route path="settings" element={<Settings />} />
                 <Route path="landing" element={<LandingSettings />} />
                 <Route path="salesmen" element={<AdminSalesmen />} />
-                <Route path="suppliers" element={<Suppliers />} />
+                {/* BUG FIX: /suppliers redirect ke StoreManagement agar link lama tidak 404 */}
+                <Route path="suppliers" element={<StoreManagement />} />
                 <Route path="suppliers/:id" element={<SupplierDetail />} />
               </Route>
 
