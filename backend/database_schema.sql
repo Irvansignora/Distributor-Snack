@@ -144,6 +144,11 @@ CREATE TABLE customer_stores (
   -- Estimasi bisnis (dari form registrasi)
   monthly_gmv_estimate  VARCHAR(50),  -- e.g. '< 5jt', '5-20jt', '> 20jt'
 
+  -- Metode pembayaran yang diizinkan untuk toko ini
+  -- Reseller: hanya ['bank_transfer','cod']
+  -- Agent: bisa semua ['bank_transfer','cod','consignment','top_14','top_30']
+  allowed_payment_methods TEXT[] DEFAULT ARRAY['bank_transfer','cod'],
+
   -- Metadata
   notes             TEXT,             -- catatan internal admin
   referral_code     VARCHAR(20),      -- siapa yang refer
@@ -416,13 +421,12 @@ CREATE TYPE payment_status AS ENUM (
 );
 
 CREATE TYPE payment_method AS ENUM (
-  'transfer_bca',
-  'transfer_mandiri',
-  'transfer_bni',
-  'transfer_bri',
-  'transfer_other',
-  'cod',
-  'credit_tempo'    -- bayar tempo/kredit
+  'bank_transfer',    -- transfer bank (semua bank)
+  'cod',              -- bayar di tempat (Cash on Delivery)
+  'consignment',      -- konsinyasi / titip jual
+  'top_14',           -- Term of Payment 14 hari
+  'top_30',           -- Term of Payment 30 hari
+  'credit_tempo'      -- kredit/tempo (legacy, dipertahankan untuk backward compat)
 );
 
 CREATE TABLE orders (
