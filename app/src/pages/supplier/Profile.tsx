@@ -5,9 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+
 import {
   User, Building2, Mail, Phone, MapPin, Lock, Bell, Loader2,
   Banknote, CreditCard, CheckCircle2, ShieldCheck, Truck, HandCoins, Clock,
@@ -15,11 +13,6 @@ import {
 import { cn } from '@/lib/utils';
 import api from '@/services/api';
 import { toast } from 'sonner';
-
-const BANK_OPTIONS = [
-  'BCA', 'Mandiri', 'BRI', 'BNI', 'BSI', 'CIMB Niaga', 'Danamon',
-  'Permata', 'BTN', 'Maybank', 'OCBC', 'Panin', 'Lainnya',
-];
 
 interface PaymentMethodInfo {
   id: string;
@@ -58,13 +51,6 @@ export default function Profile() {
   });
   const [pwSaving, setPwSaving] = useState(false);
 
-  // Bank account form
-  const [bankForm, setBankForm] = useState({
-    bank_name: store?.bank_name || '',
-    bank_account_number: store?.bank_account_number || '',
-    bank_account_name: store?.bank_account_name || '',
-  });
-  const [bankSaving, setBankSaving] = useState(false);
 
   const handleSaveProfile = async () => {
     setIsSaving(true);
@@ -116,27 +102,6 @@ export default function Profile() {
       toast.error(err.response?.data?.error || 'Gagal mengubah password');
     } finally {
       setPwSaving(false);
-    }
-  };
-
-  const handleSaveBankAccount = async () => {
-    if (!bankForm.bank_name) { toast.error('Pilih nama bank'); return; }
-    if (!bankForm.bank_account_number.trim()) { toast.error('Nomor rekening wajib diisi'); return; }
-    if (!bankForm.bank_account_name.trim()) { toast.error('Nama pemilik rekening wajib diisi'); return; }
-
-    setBankSaving(true);
-    try {
-      await api.patch('/store/payment-settings', {
-        bank_name: bankForm.bank_name,
-        bank_account_number: bankForm.bank_account_number,
-        bank_account_name: bankForm.bank_account_name,
-      });
-      await refreshStore();
-      toast.success('Rekening bank berhasil disimpan');
-    } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Gagal menyimpan rekening bank');
-    } finally {
-      setBankSaving(false);
     }
   };
 
@@ -281,83 +246,6 @@ export default function Profile() {
 
         {/* ── TAB PEMBAYARAN ── */}
         <TabsContent value="payment" className="space-y-6">
-
-          {/* Rekening Bank */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="h-5 w-5" />
-                Rekening Bank
-              </CardTitle>
-              <CardDescription>
-                Nomor rekening digunakan untuk keperluan refund dan identitas toko
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Status rekening */}
-              {store?.bank_account_number ? (
-                <div className="flex items-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg text-sm">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-emerald-800 dark:text-emerald-300">Rekening sudah tersimpan</p>
-                    <p className="text-emerald-700 dark:text-emerald-400">
-                      {store.bank_name} — {store.bank_account_number} (a.n. {store.bank_account_name})
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-sm">
-                  <Banknote className="h-4 w-4 text-amber-600 flex-shrink-0" />
-                  <p className="text-amber-800 dark:text-amber-300">Belum ada rekening bank yang disimpan</p>
-                </div>
-              )}
-
-              <div className="grid gap-4">
-                <div className="space-y-2">
-                  <Label>Nama Bank *</Label>
-                  <Select
-                    value={bankForm.bank_name}
-                    onValueChange={(v) => setBankForm(p => ({ ...p, bank_name: v }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih bank..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {BANK_OPTIONS.map(bank => (
-                        <SelectItem key={bank} value={bank}>{bank}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="account-number">Nomor Rekening *</Label>
-                  <Input
-                    id="account-number"
-                    value={bankForm.bank_account_number}
-                    onChange={(e) => setBankForm(p => ({ ...p, bank_account_number: e.target.value }))}
-                    placeholder="Contoh: 1234567890"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="account-name">Nama Pemilik Rekening *</Label>
-                  <Input
-                    id="account-name"
-                    value={bankForm.bank_account_name}
-                    onChange={(e) => setBankForm(p => ({ ...p, bank_account_name: e.target.value }))}
-                    placeholder="Sesuai nama di buku tabungan"
-                  />
-                </div>
-              </div>
-
-              <Button onClick={handleSaveBankAccount} disabled={bankSaving}>
-                {bankSaving
-                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menyimpan...</>
-                  : <><Banknote className="mr-2 h-4 w-4" />Simpan Rekening Bank</>}
-              </Button>
-            </CardContent>
-          </Card>
 
           {/* Metode Pembayaran Tersedia */}
           <Card>
