@@ -749,16 +749,22 @@ app.get('/api/products', auth, async (req, res) => {
 
     const TIER_ORDER = ['agent', 'reseller'];
     const products = (data || []).map(p => {
-      // Cari harga sesuai tier, fallback ke tier lain yang tersedia
+      // Cari harga sesuai tier customer
       let tierPrice = p.price_tiers?.find(t => t.tier === customerTier);
       if (!tierPrice && p.price_tiers?.length) {
         tierPrice = TIER_ORDER.map(tier => p.price_tiers?.find(t => t.tier === tier)).find(Boolean);
       }
+      // Harga reseller = harga standar (tampil besar)
+      const resellerPrice = p.price_tiers?.find(t => t.tier === 'reseller');
+      // Harga agent = harga grosir (tampil kecil di bawah)
+      const agentPrice = p.price_tiers?.find(t => t.tier === 'agent');
+
       return {
         ...p,
-        // Legacy field names for frontend compatibility
+        // price = harga sesuai tier customer (yang mereka bayar)
         price: storeApproved ? (tierPrice?.price_per_karton || 0) : null,
-        wholesale_price: storeApproved ? (tierPrice?.price_per_karton || 0) : null,
+        // wholesale_price = harga agent, untuk ditampilkan sebagai "Grosir"
+        wholesale_price: storeApproved ? (agentPrice?.price_per_karton || resellerPrice?.price_per_karton || 0) : null,
         stock_quantity: p.stock_karton,
         price_hidden: !storeApproved,
         price_tiers: ['admin','staff'].includes(req.user.role) ? p.price_tiers : undefined,
