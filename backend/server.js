@@ -468,9 +468,20 @@ app.patch('/api/admin/stores/:id/approve', auth, requireRole(['admin']), async (
       const { data: byUser } = await supabase.from('customer_stores')
         .select('id').eq('user_id', storeId).maybeSingle();
       if (!byUser) {
-        // Belum punya store profile sama sekali — buat dulu
+        // Belum punya store profile sama sekali — ambil nama dari tabel users dulu
+        const { data: userData } = await supabase.from('users')
+          .select('name, phone').eq('id', storeId).maybeSingle();
         const { data: newStore, error: createErr } = await supabase.from('customer_stores')
-          .insert({ user_id: storeId, store_name: '-', owner_name: '-', status: 'approved', tier, credit_limit })
+          .insert({
+            user_id: storeId,
+            store_name: userData?.name || 'Toko Baru',
+            owner_name: userData?.name || '-',
+            address_line: '-',
+            store_type: 'warung',
+            status: 'approved',
+            tier,
+            credit_limit,
+          })
           .select('id').single();
         if (createErr) throw createErr;
         existingStore = newStore;
