@@ -10,7 +10,7 @@ import api from '@/services/api';
 import { toast } from 'sonner';
 
 export default function Profile() {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, store } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -132,6 +132,15 @@ export default function Profile() {
                 <div>
                   <p className="font-semibold text-lg">{user?.company_name || user?.name}</p>
                   <p className="text-sm text-muted-foreground">{user?.email}</p>
+                  {store?.tier && (
+                    <span className={`inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      store.tier === 'agent'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {store.tier === 'agent' ? '⭐ Agent' : 'Reseller'}
+                    </span>
+                  )}
                 </div>
               </div>
 
