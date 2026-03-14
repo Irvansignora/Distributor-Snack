@@ -208,14 +208,15 @@ function ProductCard({
           <div className="flex items-center justify-between mb-2">
             <div>
               {product.price_hidden ? (
-                <p className="text-sm text-muted-foreground italic">Harga tersembunyi (akun belum terverifikasi)</p>
+                <p className="text-sm text-muted-foreground italic">Login untuk lihat harga</p>
               ) : (
                 <>
-                  {/* BUG-11 FIX: tampilkan harga sesuai tier dari backend */}
-                  <p className="text-lg font-bold text-primary">{formatCurrency(product.wholesale_price || product.price)}</p>
-                  {product.wholesale_price && product.wholesale_price < product.price && (
-                    <p className="text-xs text-muted-foreground line-through">
-                      {formatCurrency(product.price)}
+                  {/* Harga Reseller (harga utama besar) */}
+                  <p className="text-lg font-bold text-primary">{formatCurrency(product.price || 0)}</p>
+                  {/* Harga Agent (grosir, tampil jika berbeda) */}
+                  {product.wholesale_price && product.wholesale_price !== product.price && (
+                    <p className="text-xs text-muted-foreground">
+                      Grosir: {formatCurrency(product.wholesale_price)}
                     </p>
                   )}
                 </>
