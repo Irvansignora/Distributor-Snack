@@ -298,7 +298,11 @@ export default function StoreManagement() {
                               <Button
                                 size="sm"
                                 className="bg-emerald-600 hover:bg-emerald-700 h-7 px-2 text-xs"
-                                onClick={() => { setApproveDialog(s); setApproveData({ tier: s.tier || 'reseller', credit_limit: String(s.credit_limit || 0), notes: '' }); }}
+                                onClick={() => {
+                                  // Kirim store_id (dari v_stores_full) atau user_id sebagai fallback
+                                  setApproveDialog({ ...s, _approveId: s.store_id || s.user_id || s.id });
+                                  setApproveData({ tier: s.tier || 'reseller', credit_limit: String(s.credit_limit || 0), notes: '' });
+                                }}
                               >
                                 <CheckCircle className="h-3.5 w-3.5 mr-1" />
                                 Setujui
@@ -449,7 +453,7 @@ export default function StoreManagement() {
             <Button
               className="bg-emerald-600 hover:bg-emerald-700"
               onClick={() => approveMutation.mutate({
-                id: approveDialog.id,
+                id: approveDialog._approveId || approveDialog.id,
                 tier: approveData.tier,
                 credit_limit: Number(approveData.credit_limit),
                 notes: approveData.notes,
