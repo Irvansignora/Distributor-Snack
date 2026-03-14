@@ -43,7 +43,7 @@ export default function SupplierDetail() {
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
         <Building2 className="h-16 w-16 text-muted-foreground" />
         <h2 className="text-xl font-semibold">Supplier tidak ditemukan</h2>
-        <Button onClick={() => navigate('/admin/suppliers')}>
+        <Button onClick={() => navigate('/admin/stores')}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Kembali ke Daftar Supplier
         </Button>
@@ -54,7 +54,7 @@ export default function SupplierDetail() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" onClick={() => navigate('/admin/suppliers')}>
+        <Button variant="outline" size="icon" onClick={() => navigate('/admin/stores')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
