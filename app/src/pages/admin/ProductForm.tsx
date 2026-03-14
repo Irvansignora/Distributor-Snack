@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 
 // Tier pricing row
 interface TierPrice {
-  tier: 'bronze' | 'silver' | 'gold' | 'platinum';
+  tier: 'agent' | 'reseller';
   label: string;
   price_per_karton: string;
   price_per_pack: string;
@@ -24,10 +24,8 @@ interface TierPrice {
 }
 
 const defaultTiers: TierPrice[] = [
-  { tier: 'bronze',   label: 'Bronze (Warung / Baru)',      price_per_karton: '', price_per_pack: '', price_per_pcs: '', min_karton: '1' },
-  { tier: 'silver',   label: 'Silver (Minimarket Aktif)',   price_per_karton: '', price_per_pack: '', price_per_pcs: '', min_karton: '1' },
-  { tier: 'gold',     label: 'Gold (Volume Tinggi)',         price_per_karton: '', price_per_pack: '', price_per_pcs: '', min_karton: '1' },
-  { tier: 'platinum', label: 'Platinum (Sub-Distributor)',  price_per_karton: '', price_per_pack: '', price_per_pcs: '', min_karton: '1' },
+  { tier: 'agent',    label: 'Agent',    price_per_karton: '', price_per_pack: '', price_per_pcs: '', min_karton: '1' },
+  { tier: 'reseller', label: 'Reseller', price_per_karton: '', price_per_pack: '', price_per_pcs: '', min_karton: '1' },
 ];
 
 export default function ProductForm() {
@@ -90,11 +88,11 @@ export default function ProductForm() {
           } : t;
         }));
       } else if (p.price || p.wholesale_price) {
-        // Legacy: map old price fields to bronze/silver
+        // Legacy: map old price fields to reseller/agent
         setTiers(prev => prev.map(t => ({
           ...t,
-          price_per_karton: t.tier === 'bronze' ? (p.price?.toString() || '') 
-            : t.tier === 'silver' ? (p.wholesale_price?.toString() || '') : '',
+          price_per_karton: t.tier === 'reseller' ? (p.price?.toString() || '') 
+            : t.tier === 'agent' ? (p.wholesale_price?.toString() || '') : '',
         })));
       }
       if (p.image_url) setImagePreview(p.image_url);
@@ -139,7 +137,7 @@ export default function ProductForm() {
     // Validasi minimal 1 tier harga diisi
     const filledTiers = tiers.filter(t => t.price_per_karton);
     if (filledTiers.length === 0) {
-      toast.error('Minimal isi harga untuk 1 tier (Bronze)');
+      toast.error('Minimal isi harga untuk 1 tier (Reseller)');
       return;
     }
 
@@ -227,7 +225,7 @@ export default function ProductForm() {
             <Card>
               <CardHeader>
                 <CardTitle>Harga per Tier</CardTitle>
-                <p className="text-sm text-muted-foreground">Isi minimal harga Bronze (Karton). Tier lain opsional.</p>
+                <p className="text-sm text-muted-foreground">Isi minimal harga Reseller. Harga Agent opsional (jika sama, biarkan kosong).</p>
               </CardHeader>
               <CardContent className="space-y-4">
                 {tiers.map((t, idx) => (
@@ -235,12 +233,12 @@ export default function ProductForm() {
                     <Label className="font-semibold text-sm capitalize">{t.label}</Label>
                     <div className="grid grid-cols-3 gap-3">
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Harga/Karton (Rp) {t.tier === 'bronze' ? '*' : ''}</Label>
+                        <Label className="text-xs text-muted-foreground">Harga/Karton (Rp) {t.tier === 'reseller' ? '*' : ''}</Label>
                         <Input
                           type="number" min="0" placeholder="0"
                           value={t.price_per_karton}
                           onChange={e => handleTierChange(idx, 'price_per_karton', e.target.value)}
-                          required={t.tier === 'bronze'}
+                          required={t.tier === 'reseller'}
                         />
                       </div>
                       <div className="space-y-1">
