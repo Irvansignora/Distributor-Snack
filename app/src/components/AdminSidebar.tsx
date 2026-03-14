@@ -22,18 +22,18 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 const navItems = [
-  { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/admin/products', label: 'Produk', icon: Package },
-  { path: '/admin/categories', label: 'Kategori', icon: Tags },
-  { path: '/admin/inventory', label: 'Stok', icon: Warehouse },
-  { path: '/admin/orders', label: 'Pesanan', icon: ClipboardList },
-  { path: '/admin/stores', label: 'Pelanggan', icon: Users },
-  { path: '/admin/suppliers', label: 'Pelanggan Baru', icon: Users },
-  { path: '/admin/salesmen', label: 'Salesman', icon: TrendingUp },
-  { path: '/admin/payments', label: 'Pembayaran', icon: CreditCard },
-  { path: '/admin/reports', label: 'Laporan', icon: BarChart3 },
-  { path: '/admin/settings', label: 'Pengaturan', icon: Settings },
-  { path: '/admin/landing', label: 'Landing Page', icon: Globe },
+  { path: '/admin/dashboard',  label: 'Dashboard',   icon: LayoutDashboard },
+  { path: '/admin/products',   label: 'Produk',       icon: Package },
+  { path: '/admin/categories', label: 'Kategori',     icon: Tags },
+  { path: '/admin/inventory',  label: 'Stok',         icon: Warehouse },
+  { path: '/admin/orders',     label: 'Pesanan',      icon: ClipboardList },
+  // BUG FIX: gabungkan "Pelanggan" dan "Pelanggan Baru" jadi satu menu
+  { path: '/admin/stores',     label: 'Pelanggan',    icon: Users },
+  { path: '/admin/salesmen',   label: 'Salesman',     icon: TrendingUp },
+  { path: '/admin/payments',   label: 'Pembayaran',   icon: CreditCard },
+  { path: '/admin/reports',    label: 'Laporan',      icon: BarChart3 },
+  { path: '/admin/settings',   label: 'Pengaturan',   icon: Settings },
+  { path: '/admin/landing',    label: 'Landing Page', icon: Globe },
 ];
 
 export function AdminSidebar() {
@@ -44,8 +44,8 @@ export function AdminSidebar() {
 
   const sidebarContent = (
     <div className={cn(
-      "flex flex-col h-full bg-card border-r transition-all duration-300",
-      collapsed ? "w-20" : "w-64"
+      'flex flex-col h-full bg-card border-r transition-all duration-300',
+      collapsed ? 'w-20' : 'w-64'
     )}>
       {/* Logo */}
       <div className="h-16 flex items-center justify-center border-b px-4">
@@ -53,9 +53,7 @@ export function AdminSidebar() {
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
             <Package className="h-5 w-5 text-primary-foreground" />
           </div>
-          {!collapsed && (
-            <span className="font-bold text-lg">SnackHub</span>
-          )}
+          {!collapsed && <span className="font-bold text-lg">SnackHub</span>}
         </NavLink>
       </div>
 
@@ -64,20 +62,21 @@ export function AdminSidebar() {
         <nav className="space-y-1 px-2">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.path || 
-                           location.pathname.startsWith(`${item.path}/`);
-            
+            const isActive =
+              location.pathname === item.path ||
+              location.pathname.startsWith(`${item.path}/`);
+
             return (
               <NavLink
                 key={item.path}
                 to={item.path}
                 onClick={() => setMobileOpen(false)}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors",
-                  isActive 
-                    ? "bg-primary text-primary-foreground" 
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                  collapsed && "justify-center"
+                  'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors',
+                  isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                  collapsed && 'justify-center'
                 )}
                 title={collapsed ? item.label : undefined}
               >
@@ -91,10 +90,7 @@ export function AdminSidebar() {
 
       {/* User Info */}
       <div className="border-t p-4">
-        <div className={cn(
-          "flex items-center gap-3",
-          collapsed && "justify-center"
-        )}>
+        <div className={cn('flex items-center gap-3', collapsed && 'justify-center')}>
           <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
             <span className="text-sm font-semibold text-primary">
               {user?.name?.charAt(0).toUpperCase()}
