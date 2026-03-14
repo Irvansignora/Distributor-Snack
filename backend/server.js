@@ -350,37 +350,11 @@ app.get('/api/store/profile', auth, role('customer'), async (req, res) => {
 app.put('/api/store/profile', auth, role('customer'), async (req, res) => {
   try {
     const allowed = ['store_name','store_type','owner_name','phone_store','whatsapp',
-      'address_line','city_id','province_id','postal_code','monthly_gmv_estimate',
-      'bank_name','bank_account_number','bank_account_name'];
+      'address_line','city_id','province_id','postal_code','monthly_gmv_estimate'];
     const updates = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
     const { data, error } = await supabase.from('customer_stores').update(updates).eq('user_id', req.user.id).select().single();
     if (error) throw error;
     res.json({ store: data });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Endpoint: customer update bank account & request payment method (hanya yang diizinkan tier)
-app.patch('/api/store/payment-settings', auth, role('customer'), async (req, res) => {
-  try {
-    const { bank_name, bank_account_number, bank_account_name } = req.body;
-    const updates = {};
-    if (bank_name !== undefined) updates.bank_name = bank_name;
-    if (bank_account_number !== undefined) updates.bank_account_number = bank_account_number;
-    if (bank_account_name !== undefined) updates.bank_account_name = bank_account_name;
-
-    if (Object.keys(updates).length === 0)
-      return res.status(400).json({ error: 'Tidak ada data yang diperbarui' });
-
-    const { data, error } = await supabase
-      .from('customer_stores')
-      .update(updates)
-      .eq('user_id', req.user.id)
-      .select('bank_name,bank_account_number,bank_account_name,allowed_payment_methods,tier')
-      .single();
-    if (error) throw error;
-    res.json({ store: data, message: 'Pengaturan pembayaran berhasil disimpan' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1934,9 +1908,32 @@ app.get('/api/settings/public', async (req, res) => {
       'landing_about_title', 'landing_about_desc', 'landing_about_year',
       'landing_contact_phone', 'landing_contact_email', 'landing_contact_address',
       'landing_contact_city', 'landing_promo_badge',
+      // Rekening bank distributor — customer butuh ini saat checkout transfer
+      'bank_accounts',
     ];
     const { data } = await supabase.from('settings').select('*').in('key', PUBLIC_KEYS);
     res.json({ settings: Object.fromEntries((data || []).map(s => [s.key, s.value])) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint khusus: admin simpan/update rekening bank distributor
+app.patch('/api/settings/bank_accounts', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { accounts } = req.body;
+    // accounts = [{bank_name, account_number, account_name, is_primary}]
+    if (!Array.isArray(accounts))
+      return res.status(400).json({ error: 'accounts harus berupa array' });
+
+    const { data, error } = await supabase.from('settings').upsert({
+      key: 'bank_accounts',
+      value: accounts,
+      description: 'Rekening bank distributor untuk pembayaran transfer',
+      updated_by: req.user.id,
+    }, { onConflict: 'key' }).select().single();
+    if (error) throw error;
+    res.json({ setting: data, message: 'Rekening bank berhasil disimpan' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
