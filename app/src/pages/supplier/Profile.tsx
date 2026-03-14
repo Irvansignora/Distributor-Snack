@@ -5,11 +5,86 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { User, Building2, Mail, Phone, MapPin, Lock, Bell } from 'lucide-react';
+import { User, Building2, Mail, Phone, MapPin, Lock, Bell, Loader2 } from 'lucide-react';
+import api from '@/services/api';
+import { toast } from 'sonner';
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // BUG FIX: gunakan controlled state, bukan defaultValue (uncontrolled)
+  const [profileForm, setProfileForm] = useState({
+    name: user?.name || '',
+    company_name: user?.company_name || '',
+    phone: user?.phone || '',
+    address: user?.address || '',
+  });
+
+  // BUG FIX: password form dengan state terkontrol
+  const [pwForm, setPwForm] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: '',
+  });
+  const [pwSaving, setPwSaving] = useState(false);
+
+  // BUG FIX: Save Changes sekarang benar-benar memanggil API
+  const handleSaveProfile = async () => {
+    setIsSaving(true);
+    try {
+      const res = await api.put('/auth/profile', {
+        name: profileForm.name,
+        company_name: profileForm.company_name,
+        phone: profileForm.phone,
+        address: profileForm.address,
+      });
+      updateUser(res.data.user);
+      toast.success('Profil berhasil disimpan');
+      setIsEditing(false);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal menyimpan profil');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    // Reset form ke nilai user saat ini saat cancel
+    setProfileForm({
+      name: user?.name || '',
+      company_name: user?.company_name || '',
+      phone: user?.phone || '',
+      address: user?.address || '',
+    });
+    setIsEditing(false);
+  };
+
+  // BUG FIX: Change Password sekarang memanggil API
+  const handleChangePassword = async () => {
+    if (pwForm.new_password !== pwForm.confirm_password) {
+      toast.error('Konfirmasi password tidak cocok');
+      return;
+    }
+    if (pwForm.new_password.length < 6) {
+      toast.error('Password baru minimal 6 karakter');
+      return;
+    }
+    setPwSaving(true);
+    try {
+      await api.put('/auth/change-password', {
+        current_password: pwForm.current_password,
+        new_password: pwForm.new_password,
+      });
+      toast.success('Password berhasil diubah');
+      setPwForm({ current_password: '', new_password: '', confirm_password: '' });
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal mengubah password');
+    } finally {
+      setPwSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6 p-4 lg:p-8">
@@ -42,9 +117,11 @@ export default function Profile() {
                   <CardTitle>Company Information</CardTitle>
                   <CardDescription>Your business details</CardDescription>
                 </div>
-                <Button variant="outline" onClick={() => setIsEditing(!isEditing)}>
-                  {isEditing ? 'Cancel' : 'Edit'}
-                </Button>
+                {!isEditing && (
+                  <Button variant="outline" onClick={() => setIsEditing(true)}>
+                    Edit
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -65,14 +142,24 @@ export default function Profile() {
                       <User className="inline h-4 w-4 mr-1" />
                       Contact Name
                     </Label>
-                    <Input id="name" defaultValue={user?.name} disabled={!isEditing} />
+                    <Input
+                      id="name"
+                      value={profileForm.name}
+                      onChange={(e) => setProfileForm(p => ({ ...p, name: e.target.value }))}
+                      disabled={!isEditing}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="company">
                       <Building2 className="inline h-4 w-4 mr-1" />
                       Company Name
                     </Label>
-                    <Input id="company" defaultValue={user?.company_name} disabled={!isEditing} />
+                    <Input
+                      id="company"
+                      value={profileForm.company_name}
+                      onChange={(e) => setProfileForm(p => ({ ...p, company_name: e.target.value }))}
+                      disabled={!isEditing}
+                    />
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -80,7 +167,7 @@ export default function Profile() {
                     <Mail className="inline h-4 w-4 mr-1" />
                     Email Address
                   </Label>
-                  <Input id="email" type="email" defaultValue={user?.email} disabled={!isEditing} />
+                  <Input id="email" type="email" value={user?.email || ''} disabled />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -88,22 +175,36 @@ export default function Profile() {
                       <Phone className="inline h-4 w-4 mr-1" />
                       Phone Number
                     </Label>
-                    <Input id="phone" defaultValue={user?.phone} disabled={!isEditing} />
+                    <Input
+                      id="phone"
+                      value={profileForm.phone}
+                      onChange={(e) => setProfileForm(p => ({ ...p, phone: e.target.value }))}
+                      disabled={!isEditing}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="address">
                       <MapPin className="inline h-4 w-4 mr-1" />
                       Address
                     </Label>
-                    <Input id="address" defaultValue={user?.address} disabled={!isEditing} />
+                    <Input
+                      id="address"
+                      value={profileForm.address}
+                      onChange={(e) => setProfileForm(p => ({ ...p, address: e.target.value }))}
+                      disabled={!isEditing}
+                    />
                   </div>
                 </div>
               </div>
 
               {isEditing && (
                 <div className="flex gap-2">
-                  <Button onClick={() => setIsEditing(false)}>Save Changes</Button>
-                  <Button variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
+                  <Button onClick={handleSaveProfile} disabled={isSaving}>
+                    {isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menyimpan...</> : 'Save Changes'}
+                  </Button>
+                  <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
+                    Cancel
+                  </Button>
                 </div>
               )}
             </CardContent>
@@ -119,17 +220,34 @@ export default function Profile() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="current">Current Password</Label>
-                <Input id="current" type="password" />
+                <Input
+                  id="current"
+                  type="password"
+                  value={pwForm.current_password}
+                  onChange={(e) => setPwForm(p => ({ ...p, current_password: e.target.value }))}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="new">New Password</Label>
-                <Input id="new" type="password" />
+                <Input
+                  id="new"
+                  type="password"
+                  value={pwForm.new_password}
+                  onChange={(e) => setPwForm(p => ({ ...p, new_password: e.target.value }))}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirm">Confirm New Password</Label>
-                <Input id="confirm" type="password" />
+                <Input
+                  id="confirm"
+                  type="password"
+                  value={pwForm.confirm_password}
+                  onChange={(e) => setPwForm(p => ({ ...p, confirm_password: e.target.value }))}
+                />
               </div>
-              <Button>Update Password</Button>
+              <Button onClick={handleChangePassword} disabled={pwSaving}>
+                {pwSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Mengubah...</> : 'Update Password'}
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
