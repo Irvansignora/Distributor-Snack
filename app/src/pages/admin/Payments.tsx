@@ -19,15 +19,15 @@ import type { Payment } from '@/types';
 
 export default function Payments() {
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [notes, setNotes] = useState('');
-  // BUG-07 FIX: tambah state pagination
+  const [rejectReason, setRejectReason] = useState('');
   const [page, setPage] = useState(1);
   const LIMIT = 10;
 
   const { data, refetch } = useQuery({
     queryKey: ['payments', page],
-    // BUG-07 FIX: kirim page & limit ke API
     queryFn: () => paymentService.getPayments({ page, limit: LIMIT }),
   });
 
@@ -35,25 +35,28 @@ export default function Payments() {
     mutationFn: ({ id, notes }: { id: string; notes?: string }) =>
       paymentService.updateStatus(id, 'approved', notes),
     onSuccess: () => {
-      toast.success('Payment approved');
-      setDialogOpen(false);
+      toast.success('Pembayaran berhasil dikonfirmasi');
+      setApproveDialogOpen(false);
+      setNotes('');
       refetch();
     },
-    onError: () => {
-      toast.error('Failed to approve payment');
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Gagal mengkonfirmasi pembayaran');
     },
   });
 
+  // BUG FIX: reject sekarang buka dialog untuk isi alasan penolakan, bukan langsung reject
   const rejectMutation = useMutation({
-    mutationFn: ({ id, notes }: { id: string; notes?: string }) =>
-      paymentService.updateStatus(id, 'rejected', notes),
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      paymentService.updateStatus(id, 'rejected', reason),
     onSuccess: () => {
-      toast.success('Payment rejected');
-      setDialogOpen(false);
+      toast.success('Pembayaran ditolak');
+      setRejectDialogOpen(false);
+      setRejectReason('');
       refetch();
     },
-    onError: () => {
-      toast.error('Failed to reject payment');
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Gagal menolak pembayaran');
     },
   });
 
@@ -83,7 +86,7 @@ export default function Payments() {
               <thead>
                 <tr className="border-b bg-muted/50">
                   <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Payment ID</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Supplier</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Toko</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Order</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Amount</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Method</th>
@@ -103,8 +106,17 @@ export default function Payments() {
                   data?.payments?.map((payment) => (
                     <tr key={payment.id} className="border-b hover:bg-muted/50">
                       <td className="py-3 px-4 font-medium">#{payment.id.slice(0, 8)}</td>
-                      <td className="py-3 px-4">{payment.users?.company_name || payment.users?.name}</td>
-                      <td className="py-3 px-4">#{payment.order_id.slice(0, 8)}</td>
+                      {/* BUG FIX: tampilkan store name dari customer_stores (join di backend) */}
+                      <td className="py-3 px-4">
+                        {(payment as any).customer_stores?.store_name ||
+                         payment.users?.company_name ||
+                         payment.users?.name || '-'}
+                      </td>
+                      <td className="py-3 px-4">
+                        {(payment as any).orders?.order_number
+                          ? `#${(payment as any).orders.order_number}`
+                          : `#${payment.order_id.slice(0, 8)}`}
+                      </td>
                       <td className="py-3 px-4 font-medium">{formatCurrency(payment.amount)}</td>
                       <td className="py-3 px-4 capitalize">{payment.payment_method.replace('_', ' ')}</td>
                       <td className="py-3 px-4">
@@ -133,7 +145,8 @@ export default function Payments() {
                                 className="text-emerald-500"
                                 onClick={() => {
                                   setSelectedPayment(payment);
-                                  setDialogOpen(true);
+                                  setNotes('');
+                                  setApproveDialogOpen(true);
                                 }}
                               >
                                 <CheckCircle className="h-4 w-4" />
@@ -142,7 +155,11 @@ export default function Payments() {
                                 variant="ghost"
                                 size="icon"
                                 className="text-destructive"
-                                onClick={() => rejectMutation.mutate({ id: payment.id })}
+                                onClick={() => {
+                                  setSelectedPayment(payment);
+                                  setRejectReason('');
+                                  setRejectDialogOpen(true);
+                                }}
                               >
                                 <XCircle className="h-4 w-4" />
                               </Button>
@@ -159,39 +176,75 @@ export default function Payments() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* Dialog: Approve */}
+      <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Approve Payment</DialogTitle>
+            <DialogTitle>Konfirmasi Pembayaran</DialogTitle>
             <DialogDescription>
-              Are you sure you want to approve this payment of {selectedPayment && formatCurrency(selectedPayment.amount)}?
+              Konfirmasi pembayaran sebesar {selectedPayment && formatCurrency(selectedPayment.amount)}?
+              Kredit pelanggan dan status order akan diperbarui otomatis.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Notes (Optional)</label>
+              <label className="text-sm font-medium">Catatan (Opsional)</label>
               <Textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Add any notes about this payment approval"
+                placeholder="Tambahkan catatan verifikasi..."
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancel
+            <Button variant="outline" onClick={() => setApproveDialogOpen(false)}>
+              Batal
             </Button>
             <Button
               onClick={() => selectedPayment && approveMutation.mutate({ id: selectedPayment.id, notes })}
               disabled={approveMutation.isPending}
             >
-              {approveMutation.isPending ? 'Approving...' : 'Approve Payment'}
+              {approveMutation.isPending ? 'Memproses...' : 'Konfirmasi'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* BUG-07 FIX: pagination controls */}
+      {/* Dialog: Reject — BUG FIX: dulu reject langsung tanpa alasan, sekarang minta alasan */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Tolak Pembayaran</DialogTitle>
+            <DialogDescription>
+              Masukkan alasan penolakan untuk pembayaran sebesar {selectedPayment && formatCurrency(selectedPayment.amount)}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Alasan Penolakan *</label>
+              <Textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Contoh: Bukti transfer tidak terbaca, nominal tidak sesuai, dll."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => selectedPayment && rejectMutation.mutate({ id: selectedPayment.id, reason: rejectReason })}
+              disabled={rejectMutation.isPending || !rejectReason.trim()}
+            >
+              {rejectMutation.isPending ? 'Memproses...' : 'Tolak Pembayaran'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pagination */}
       {data?.pagination && data.pagination.totalPages > 1 && (
         <div className="flex justify-center gap-2">
           <Button
