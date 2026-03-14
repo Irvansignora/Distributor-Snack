@@ -29,10 +29,8 @@ const STATUS_CONFIG = {
 };
 
 const TIER_CONFIG = {
-  bronze:   { label: 'Bronze',   color: 'bg-amber-700 text-white' },
-  silver:   { label: 'Silver',   color: 'bg-gray-400 text-white' },
-  gold:     { label: 'Gold',     color: 'bg-yellow-500 text-white' },
-  platinum: { label: 'Platinum', color: 'bg-blue-600 text-white' },
+  agent:    { label: 'Agent',    color: 'bg-emerald-600 text-white' },
+  reseller: { label: 'Reseller', color: 'bg-amber-600 text-white' },
 };
 
 export default function StoreManagement() {
@@ -45,7 +43,7 @@ export default function StoreManagement() {
   const [rejectDialog, setRejectDialog]   = useState<any>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
 
-  const [approveData, setApproveData] = useState({ tier: 'bronze', credit_limit: '0', notes: '' });
+  const [approveData, setApproveData] = useState({ tier: 'reseller', credit_limit: '0', notes: '' });
   const [rejectReason, setRejectReason] = useState('');
   const [addForm, setAddForm] = useState({ name: '', email: '', password: '', company_name: '', phone: '' });
 
@@ -297,7 +295,7 @@ export default function StoreManagement() {
                                 <Button
                                   size="sm"
                                   className="bg-emerald-600 hover:bg-emerald-700 h-7 px-2 text-xs"
-                                  onClick={() => { setApproveDialog(s); setApproveData({ tier: 'bronze', credit_limit: '0', notes: '' }); }}
+                                  onClick={() => { setApproveDialog(s); setApproveData({ tier: 'reseller', credit_limit: '0', notes: '' }); }}
                                 >
                                   <CheckCircle className="h-3.5 w-3.5 mr-1" />
                                   Setujui
@@ -424,7 +422,7 @@ export default function StoreManagement() {
                   {Object.entries(TIER_CONFIG).map(([v, c]) => (
                     <SelectItem key={v} value={v}>
                       <span className={cn('px-2 py-0.5 rounded text-xs mr-2', c.color)}>{c.label}</span>
-                      {v === 'bronze' ? '— Harga Standar' : v === 'silver' ? '— Harga Lebih Murah' : v === 'gold' ? '— Harga Terbaik' : '— Harga Khusus'}
+                      {v === 'agent' ? '— Harga Agent' : '— Harga Reseller'}
                     </SelectItem>
                   ))}
                 </SelectContent>
