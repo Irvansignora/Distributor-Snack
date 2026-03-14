@@ -154,9 +154,8 @@ export default function SalesmanStores() {
                         <Badge
                           variant="outline"
                           className={cn('text-[10px] px-1.5 py-0 flex-shrink-0', {
-                            'border-amber-300 text-amber-600 bg-amber-50': store.tier === 'silver',
-                            'border-yellow-300 text-yellow-600 bg-yellow-50': store.tier === 'gold',
-                            'border-purple-300 text-purple-600 bg-purple-50': store.tier === 'platinum',
+                            'border-emerald-300 text-emerald-600 bg-emerald-50': store.tier === 'agent',
+                            'border-amber-300 text-amber-600 bg-amber-50': store.tier === 'reseller',
                           })}
                         >
                           {store.tier}
