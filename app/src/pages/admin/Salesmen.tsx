@@ -41,9 +41,16 @@ import {
   UserPlus,
   Pencil,
   UserX,
+  ClipboardCheck,
+  Clock,
+  LogIn,
+  LogOut,
+  Calendar,
+  Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import type { AdminAttendanceRecord } from '@/services/salesman';
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(v);
@@ -72,6 +79,10 @@ export default function AdminSalesmen() {
   const [salesmanDialog, setSalesmanDialog] = useState<{ mode: 'create' | 'edit'; id?: string; name?: string } | null>(null);
   const [salesmanForm, setSalesmanForm] = useState({ name: '', email: '', password: '', phone: '' });
 
+  // ── Attendance filter state ──────────────────────────────
+  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().slice(0, 10));
+  const [attendanceSalesmanId, setAttendanceSalesmanId] = useState<string>('all');
+
   const qc = useQueryClient();
 
   const { data: salesmenData, isLoading } = useQuery({
@@ -87,6 +98,14 @@ export default function AdminSalesmen() {
   const { data: visitsData } = useQuery({
     queryKey: ['admin-visits'],
     queryFn: () => adminSalesmanService.getVisits({ page: 1 }),
+  });
+
+  const { data: attendanceData, isLoading: attendanceLoading } = useQuery({
+    queryKey: ['admin-attendance', attendanceDate, attendanceSalesmanId],
+    queryFn: () => adminSalesmanService.getAdminAttendance({
+      date: attendanceDate || undefined,
+      salesman_id: attendanceSalesmanId === 'all' ? undefined : attendanceSalesmanId,
+    }),
   });
 
   const targetMutation = useMutation({
@@ -156,6 +175,38 @@ export default function AdminSalesmen() {
   const salesmen = salesmenData?.salesmen || [];
   const stores = storesData?.suppliers || [];
   const visits = visitsData?.visits || [];
+  const attendanceRecords: AdminAttendanceRecord[] = attendanceData?.attendance || [];
+
+  // ── Helper: hitung durasi kerja ──────────────────────────
+  const calcDuration = (clockIn?: string, clockOut?: string): string => {
+    if (!clockIn || !clockOut) return '—';
+    const diff = new Date(clockOut).getTime() - new Date(clockIn).getTime();
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    return `${h}j ${m}m`;
+  };
+
+  // ── Helper: export absensi ke CSV ────────────────────────
+  const exportAttendanceCSV = () => {
+    if (attendanceRecords.length === 0) { toast.error('Tidak ada data absensi'); return; }
+    const headers = ['Nama', 'Tanggal', 'Status', 'Clock In', 'Clock Out', 'Durasi', 'Alamat Clock In', 'Alamat Clock Out'];
+    const rows = attendanceRecords.map(r => [
+      r.users?.name || '—',
+      r.date,
+      r.status,
+      r.clock_in ? new Date(r.clock_in).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '—',
+      r.clock_out ? new Date(r.clock_out).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '—',
+      calcDuration(r.clock_in, r.clock_out),
+      r.clock_in_address || '—',
+      r.clock_out_address || '—',
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `absensi_${attendanceDate || 'semua'}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="space-y-6">
@@ -182,6 +233,10 @@ export default function AdminSalesmen() {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="attendance">
+            <ClipboardCheck className="h-4 w-4 mr-1.5" />
+            Absensi
+          </TabsTrigger>
           <TabsTrigger value="visits">Kunjungan</TabsTrigger>
           <TabsTrigger value="stores">Toko per Salesman</TabsTrigger>
         </TabsList>
@@ -305,6 +360,226 @@ export default function AdminSalesmen() {
               })}
             </div>
           )}
+        </TabsContent>
+
+        {/* ── ABSENSI TAB ── */}
+        <TabsContent value="attendance" className="mt-4 space-y-4">
+          {/* Filter bar */}
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row gap-3 items-end">
+                <div className="space-y-1 flex-1">
+                  <Label className="text-xs text-muted-foreground">Tanggal</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="date"
+                      className="pl-9"
+                      value={attendanceDate}
+                      onChange={e => setAttendanceDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1 flex-1">
+                  <Label className="text-xs text-muted-foreground">Filter Salesman</Label>
+                  <Select value={attendanceSalesmanId} onValueChange={setAttendanceSalesmanId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Semua salesman" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Semua Salesman</SelectItem>
+                      {salesmen.map((sm: any) => (
+                        <SelectItem key={sm.id} value={sm.id}>{sm.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button variant="outline" onClick={exportAttendanceCSV} className="shrink-0">
+                  <Download className="mr-2 h-4 w-4" />
+                  Export CSV
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Summary cards */}
+          {attendanceRecords.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {(() => {
+                const hadir  = attendanceRecords.filter(r => r.status === 'hadir').length;
+                const izin   = attendanceRecords.filter(r => r.status === 'izin').length;
+                const sakit  = attendanceRecords.filter(r => r.status === 'sakit').length;
+                const alpha  = attendanceRecords.filter(r => r.status === 'alpha').length;
+                return (
+                  <>
+                    <Card className="bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800">
+                      <CardContent className="p-4 text-center">
+                        <p className="text-2xl font-bold text-emerald-600">{hadir}</p>
+                        <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">Hadir</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
+                      <CardContent className="p-4 text-center">
+                        <p className="text-2xl font-bold text-amber-600">{izin}</p>
+                        <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Izin</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
+                      <CardContent className="p-4 text-center">
+                        <p className="text-2xl font-bold text-blue-600">{sakit}</p>
+                        <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">Sakit</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800">
+                      <CardContent className="p-4 text-center">
+                        <p className="text-2xl font-bold text-red-600">{alpha}</p>
+                        <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">Tidak Hadir</p>
+                      </CardContent>
+                    </Card>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* Attendance table */}
+          <Card>
+            <CardHeader className="pb-0">
+              <CardTitle className="text-base flex items-center gap-2">
+                <ClipboardCheck className="h-4 w-4" />
+                Rekap Absensi
+                {attendanceDate && (
+                  <Badge variant="secondary" className="ml-1 text-xs font-normal">
+                    {new Date(attendanceDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0 mt-4">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">Salesman</th>
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">Status</th>
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">
+                        <div className="flex items-center gap-1"><LogIn className="h-3.5 w-3.5" /> Clock In</div>
+                      </th>
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">
+                        <div className="flex items-center gap-1"><LogOut className="h-3.5 w-3.5" /> Clock Out</div>
+                      </th>
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">
+                        <div className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Durasi</div>
+                      </th>
+                      <th className="text-left py-3 px-4 font-medium text-muted-foreground">Lokasi Clock In</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attendanceLoading ? (
+                      <tr>
+                        <td colSpan={6} className="py-10 text-center">
+                          <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                        </td>
+                      </tr>
+                    ) : attendanceRecords.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-12 text-center">
+                          <ClipboardCheck className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                          <p className="font-medium text-muted-foreground">Tidak ada data absensi</p>
+                          <p className="text-xs text-muted-foreground mt-1">Coba ubah filter tanggal atau salesman</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      attendanceRecords.map((record) => {
+                        const statusConfig = {
+                          hadir:  { label: 'Hadir',      cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' },
+                          izin:   { label: 'Izin',       cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' },
+                          sakit:  { label: 'Sakit',      cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' },
+                          alpha:  { label: 'Tdk Hadir',  cls: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' },
+                        };
+                        const s = statusConfig[record.status] ?? { label: record.status, cls: '' };
+                        const clockInTime  = record.clock_in  ? new Date(record.clock_in).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '—';
+                        const clockOutTime = record.clock_out ? new Date(record.clock_out).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '—';
+                        const duration     = calcDuration(record.clock_in, record.clock_out);
+
+                        return (
+                          <tr key={record.id} className="border-b hover:bg-muted/30 transition-colors">
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-full bg-orange-500/10 flex items-center justify-center shrink-0">
+                                  <span className="text-xs font-bold text-orange-500">
+                                    {record.users?.name?.charAt(0).toUpperCase() || '?'}
+                                  </span>
+                                </div>
+                                <div>
+                                  <p className="font-medium leading-none">{record.users?.name || '—'}</p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">{record.date}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={cn('text-xs font-semibold px-2 py-1 rounded-full', s.cls)}>
+                                {s.label}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-1.5">
+                                {record.clock_in ? (
+                                  <>
+                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    <span className="font-mono text-sm">{clockInTime}</span>
+                                  </>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-1.5">
+                                {record.clock_out ? (
+                                  <>
+                                    <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                                    <span className="font-mono text-sm">{clockOutTime}</span>
+                                  </>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs">Belum CO</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span className={cn('text-sm', duration === '—' ? 'text-muted-foreground' : 'font-medium')}>{duration}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 max-w-[200px]">
+                              {record.clock_in_address ? (
+                                <p className="text-xs text-muted-foreground truncate" title={record.clock_in_address}>
+                                  {record.clock_in_address}
+                                </p>
+                              ) : record.clock_in_lat ? (
+                                <a
+                                  href={`https://maps.google.com/?q=${record.clock_in_lat},${record.clock_in_lng}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-500 hover:underline flex items-center gap-1"
+                                >
+                                  <MapPin className="h-3 w-3" />
+                                  Lihat di Maps
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* ── VISITS TAB ── */}
