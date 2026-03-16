@@ -15,6 +15,9 @@ import {
   Warehouse,
   Tags,
   TrendingUp,
+  RotateCcw,
+  Tag,
+  Ticket,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -22,18 +25,20 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 const navItems = [
-  { path: '/admin/dashboard',  label: 'Dashboard',   icon: LayoutDashboard },
-  { path: '/admin/products',   label: 'Produk',       icon: Package },
-  { path: '/admin/categories', label: 'Kategori',     icon: Tags },
-  { path: '/admin/inventory',  label: 'Stok',         icon: Warehouse },
-  { path: '/admin/orders',     label: 'Pesanan',      icon: ClipboardList },
-  // BUG FIX: gabungkan "Pelanggan" dan "Pelanggan Baru" jadi satu menu
-  { path: '/admin/stores',     label: 'Pelanggan',    icon: Users },
-  { path: '/admin/salesmen',   label: 'Salesman',     icon: TrendingUp },
-  { path: '/admin/payments',   label: 'Pembayaran',   icon: CreditCard },
-  { path: '/admin/reports',    label: 'Laporan',      icon: BarChart3 },
-  { path: '/admin/settings',   label: 'Pengaturan',   icon: Settings },
-  { path: '/admin/landing',    label: 'Landing Page', icon: Globe },
+  { path: '/admin/dashboard',      label: 'Dashboard',     icon: LayoutDashboard },
+  { path: '/admin/products',       label: 'Produk',         icon: Package },
+  { path: '/admin/categories',     label: 'Kategori',       icon: Tags },
+  { path: '/admin/inventory',      label: 'Stok',           icon: Warehouse },
+  { path: '/admin/orders',         label: 'Pesanan',        icon: ClipboardList },
+  { path: '/admin/returns',        label: 'Retur & Klaim',  icon: RotateCcw },
+  { path: '/admin/stores',         label: 'Pelanggan',      icon: Users },
+  { path: '/admin/special-prices', label: 'Harga Khusus',  icon: Tag },
+  { path: '/admin/promos',         label: 'Promo',          icon: Ticket },
+  { path: '/admin/salesmen',       label: 'Salesman',       icon: TrendingUp },
+  { path: '/admin/payments',       label: 'Pembayaran',     icon: CreditCard },
+  { path: '/admin/reports',        label: 'Laporan',        icon: BarChart3 },
+  { path: '/admin/settings',       label: 'Pengaturan',     icon: Settings },
+  { path: '/admin/landing',        label: 'Landing Page',   icon: Globe },
 ];
 
 export function AdminSidebar() {
