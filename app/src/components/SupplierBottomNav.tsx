@@ -1,12 +1,13 @@
 import { NavLink } from 'react-router-dom';
-import { Home, ShoppingBag, ClipboardList, User } from 'lucide-react';
+import { Home, ShoppingBag, ClipboardList, User, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { to: '/supplier/dashboard', label: 'Home', icon: Home },
-  { to: '/supplier/catalog', label: 'Catalog', icon: ShoppingBag },
-  { to: '/supplier/orders', label: 'Orders', icon: ClipboardList },
-  { to: '/supplier/profile', label: 'Profile', icon: User },
+  { to: '/supplier/dashboard', label: 'Home',    icon: Home },
+  { to: '/supplier/catalog',   label: 'Catalog', icon: ShoppingBag },
+  { to: '/supplier/orders',    label: 'Orders',  icon: ClipboardList },
+  { to: '/supplier/returns',   label: 'Retur',   icon: RotateCcw },
+  { to: '/supplier/profile',   label: 'Profile', icon: User },
 ];
 
 export function SupplierBottomNav() {
