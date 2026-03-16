@@ -2692,6 +2692,411 @@ app.get('/api/admin/visits', auth, requireRole(['admin','staff']), async (req, r
   }
 });
 
+// ════════════════════════════════════════════════════════════════
+// RETURNS & KLAIM
+// ════════════════════════════════════════════════════════════════
+
+// GET semua retur (admin/staff)
+app.get('/api/returns', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { status, store_id, page = 1, limit = 20 } = req.query;
+    let q = supabase.from('returns')
+      .select('*, orders(order_number), customer_stores(store_name, owner_name)', { count: 'exact' })
+      .order('created_at', { ascending: false });
+    if (status) q = q.eq('status', status);
+    if (store_id) q = q.eq('store_id', store_id);
+    const offset = (page - 1) * limit;
+    const { data, count, error } = await q.range(offset, offset + limit - 1);
+    if (error) throw error;
+    res.json({ returns: data || [], total: count || 0, pagination: { page: Number(page), limit: Number(limit), total: count, totalPages: Math.ceil((count || 0) / limit) } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET retur milik customer sendiri
+app.get('/api/returns/my', auth, role('customer'), async (req, res) => {
+  try {
+    const { data: store } = await supabase.from('customer_stores').select('id').eq('user_id', req.user.id).single();
+    if (!store) return res.json({ returns: [] });
+    const { data, error } = await supabase.from('returns')
+      .select('*, orders(order_number, total)')
+      .eq('store_id', store.id)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json({ returns: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST buat retur baru (customer)
+app.post('/api/returns', auth, role('customer'), async (req, res) => {
+  try {
+    const { order_id, reason, items } = req.body;
+    if (!order_id || !reason || !items?.length)
+      return res.status(400).json({ error: 'order_id, reason, dan items wajib diisi' });
+
+    const { data: store } = await supabase.from('customer_stores').select('id').eq('user_id', req.user.id).single();
+    const { data: order } = await supabase.from('orders').select('id, store_id, status').eq('id', order_id).single();
+    if (!order || order.store_id !== store?.id) return res.status(403).json({ error: 'Forbidden' });
+    if (!['delivered','completed'].includes(order.status))
+      return res.status(400).json({ error: 'Retur hanya bisa dilakukan setelah pesanan diterima' });
+
+    const { data: ret, error } = await supabase.from('returns').insert({
+      order_id, store_id: store.id, reason, items, status: 'requested',
+    }).select().single();
+    if (error) throw error;
+
+    // Notif admin
+    const { data: admins } = await supabase.from('users').select('id').eq('role', 'admin');
+    for (const a of admins || []) {
+      await createNotification(a.id, 'new_return', '↩️ Permintaan Retur',
+        `Toko mengajukan retur untuk order #${order_id.slice(0,8)}`, { return_id: ret.id });
+    }
+    res.status(201).json({ return: ret });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH proses retur (admin)
+app.patch('/api/returns/:id/process', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { status, admin_notes, refund_amount, refund_method } = req.body;
+    const validStatuses = ['approved','rejected','processed'];
+    if (!validStatuses.includes(status))
+      return res.status(400).json({ error: 'Status tidak valid' });
+
+    const { data: ret, error } = await supabase.from('returns')
+      .update({ status, admin_notes, refund_amount, refund_method, processed_by: req.user.id })
+      .eq('id', req.params.id)
+      .select('*, customer_stores(user_id, store_name, whatsapp, owner_name)')
+      .single();
+    if (error) throw error;
+
+    // Jika approved + ada refund → catat ke credit_ledger sebagai kredit
+    if (status === 'approved' && refund_amount && refund_method === 'credit_note') {
+      const { data: store } = await supabase.from('customer_stores').select('credit_used').eq('id', ret.store_id).single();
+      const newCredit = Math.max(0, (store?.credit_used || 0) - refund_amount);
+      await supabase.from('customer_stores').update({ credit_used: newCredit }).eq('id', ret.store_id);
+      await supabase.from('credit_ledger').insert({
+        store_id: ret.store_id, type: 'return_credit',
+        debit: 0, credit: refund_amount, balance_after: newCredit,
+        reference_id: ret.id, reference_type: 'return',
+        notes: `Kredit retur #${ret.id.slice(0,8)}`,
+      });
+    }
+
+    if (ret.customer_stores?.user_id) {
+      const label = status === 'approved' ? '✅ Retur Disetujui' : status === 'rejected' ? '❌ Retur Ditolak' : '📦 Retur Diproses';
+      await createNotification(ret.customer_stores.user_id, 'return_update', label,
+        admin_notes || `Status retur diperbarui: ${status}`, { return_id: ret.id });
+    }
+    res.json({ return: ret });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════
+// HARGA KHUSUS PER TOKO (special_prices)
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/special-prices', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { store_id, product_id } = req.query;
+    let q = supabase.from('special_prices')
+      .select('*, products(name,sku), customer_stores(store_name,owner_name)')
+      .order('created_at', { ascending: false });
+    if (store_id) q = q.eq('store_id', store_id);
+    if (product_id) q = q.eq('product_id', product_id);
+    const { data, error } = await q;
+    if (error) throw error;
+    res.json({ special_prices: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/special-prices', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { product_id, store_id, price_per_karton, notes, valid_from, valid_until } = req.body;
+    if (!product_id || !store_id || !price_per_karton)
+      return res.status(400).json({ error: 'product_id, store_id, dan price_per_karton wajib diisi' });
+    const { data, error } = await supabase.from('special_prices')
+      .upsert({ product_id, store_id, price_per_karton, notes, valid_from: valid_from || null, valid_until: valid_until || null, created_by: req.user.id },
+        { onConflict: 'product_id,store_id' })
+      .select('*, products(name,sku), customer_stores(store_name)')
+      .single();
+    if (error) throw error;
+    res.status(201).json({ special_price: data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/special-prices/:id', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { error } = await supabase.from('special_prices').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ message: 'Harga khusus dihapus' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Endpoint untuk customer: cek apakah ada special price untuk produk tertentu
+app.get('/api/special-prices/my', auth, role('customer'), async (req, res) => {
+  try {
+    const { data: store } = await supabase.from('customer_stores').select('id').eq('user_id', req.user.id).single();
+    if (!store) return res.json({ special_prices: [] });
+    const today = new Date().toISOString().split('T')[0];
+    const { data } = await supabase.from('special_prices')
+      .select('product_id, price_per_karton, valid_until')
+      .eq('store_id', store.id)
+      .or(`valid_until.is.null,valid_until.gte.${today}`);
+    res.json({ special_prices: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════
+// LAPORAN PIUTANG (AR) — diperluas
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/reports/ar', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { overdue_only, tier } = req.query;
+    let q = supabase.from('customer_stores')
+      .select('id, store_name, owner_name, whatsapp, tier, credit_limit, credit_used, credit_due_days')
+      .eq('status', 'approved')
+      .gt('credit_used', 0)
+      .order('credit_used', { ascending: false });
+    if (tier) q = q.eq('tier', tier);
+    const { data: stores, error } = await q;
+    if (error) throw error;
+
+    // Untuk setiap toko, ambil order credit yang belum lunas
+    const result = [];
+    for (const store of stores || []) {
+      const { data: overdueOrders } = await supabase.from('orders')
+        .select('id, order_number, total, total_paid, credit_due_date, created_at')
+        .eq('store_id', store.id)
+        .eq('is_credit_order', true)
+        .neq('payment_status', 'paid')
+        .order('credit_due_date', { ascending: true });
+
+      const today = new Date();
+      const overdue = (overdueOrders || []).filter(o => o.credit_due_date && new Date(o.credit_due_date) < today);
+      if (overdue_only === 'true' && overdue.length === 0) continue;
+
+      result.push({
+        ...store,
+        ar_percentage: store.credit_limit > 0 ? Math.round((store.credit_used / store.credit_limit) * 100) : 0,
+        overdue_orders: overdue,
+        overdue_amount: overdue.reduce((s, o) => s + (o.total - (o.total_paid || 0)), 0),
+        pending_orders: overdueOrders || [],
+      });
+    }
+
+    const summary = {
+      total_stores: result.length,
+      total_ar: result.reduce((s, r) => s + (r.credit_used || 0), 0),
+      total_overdue: result.reduce((s, r) => s + (r.overdue_amount || 0), 0),
+      overdue_stores: result.filter(r => r.overdue_amount > 0).length,
+    };
+    res.json({ stores: result, summary });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════
+// LAPORAN KOMISI SALESMAN
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/reports/salesman-commission', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { month = new Date().getMonth() + 1, year = new Date().getFullYear() } = req.query;
+    const { data, error } = await supabase.from('v_salesman_monthly_achievement')
+      .select('*')
+      .eq('period_month', Number(month))
+      .eq('period_year', Number(year))
+      .order('actual_revenue', { ascending: false });
+    if (error) throw error;
+
+    const summary = {
+      total_salesman: (data || []).length,
+      total_revenue: (data || []).reduce((s, r) => s + (r.actual_revenue || 0), 0),
+      total_commission: (data || []).reduce((s, r) => s + (r.estimated_commission || 0), 0),
+      avg_achievement: (data || []).length ? Math.round((data || []).reduce((s, r) => s + (r.achievement_pct || 0), 0) / (data || []).length) : 0,
+    };
+    res.json({ commissions: data || [], summary, month: Number(month), year: Number(year) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════
+// ALERT STOK MENIPIS — trigger WA notif ke admin
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/inventory/low-stock-alert', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('products')
+      .select('id, name, sku, stock_karton, reorder_level, categories(name)')
+      .eq('is_active', true)
+      .lte('stock_karton', supabase.rpc) // fallback ke filter manual
+      .order('stock_karton', { ascending: true });
+
+    // Filter manual karena Supabase tidak support column comparison langsung
+    const { data: allProducts, error: err2 } = await supabase.from('products')
+      .select('id, name, sku, stock_karton, reorder_level, categories(name)')
+      .eq('is_active', true)
+      .order('stock_karton', { ascending: true });
+    if (err2) throw err2;
+
+    const lowStock = (allProducts || []).filter(p => p.stock_karton <= p.reorder_level);
+    const outOfStock = lowStock.filter(p => p.stock_karton === 0);
+    res.json({ low_stock: lowStock, out_of_stock: outOfStock, count: lowStock.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST: kirim WA alert stok menipis ke semua admin
+app.post('/api/inventory/send-low-stock-alert', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { data: allProducts } = await supabase.from('products')
+      .select('id, name, sku, stock_karton, reorder_level')
+      .eq('is_active', true)
+      .order('stock_karton', { ascending: true });
+
+    const lowStock = (allProducts || []).filter(p => p.stock_karton <= p.reorder_level);
+    if (lowStock.length === 0) return res.json({ message: 'Tidak ada produk stok menipis', sent: 0 });
+
+    const lines = lowStock.slice(0, 10).map(p =>
+      `• ${p.name} (${p.sku}): *${p.stock_karton}* karton${p.stock_karton === 0 ? ' ⚠️ HABIS' : ''}`
+    ).join('\n');
+
+    const msg = `⚠️ *Alert Stok Menipis*\n\n${lines}\n${lowStock.length > 10 ? `\n...dan ${lowStock.length - 10} produk lainnya` : ''}\n\nSegera lakukan pengisian stok.`;
+
+    const { data: admins } = await supabase.from('users').select('id,phone').eq('role', 'admin');
+    let sent = 0;
+    for (const admin of admins || []) {
+      if (admin.phone) {
+        await sendWhatsApp(admin.phone, msg);
+        sent++;
+      }
+      await createNotification(admin.id, 'low_stock_alert', '⚠️ Stok Menipis',
+        `${lowStock.length} produk perlu restok`, { count: lowStock.length });
+    }
+    res.json({ message: `Alert dikirim ke ${sent} admin`, sent, products: lowStock.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════
+// PROMO MANAGEMENT (Admin UI)
+// ════════════════════════════════════════════════════════════════
+
+app.get('/api/admin/promos', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('promos')
+      .select('*, users!created_by(name)')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    // Tambah usage count per promo
+    const promoIds = (data || []).map(p => p.id);
+    const usageCounts = {};
+    if (promoIds.length > 0) {
+      const { data: usageData } = await supabase.from('promo_usage')
+        .select('promo_id').in('promo_id', promoIds);
+      (usageData || []).forEach(u => {
+        usageCounts[u.promo_id] = (usageCounts[u.promo_id] || 0) + 1;
+      });
+    }
+    const promos = (data || []).map(p => ({ ...p, usage_count: usageCounts[p.id] || 0 }));
+    res.json({ promos });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/admin/promos/:id', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('promos')
+      .update({ ...req.body, updated_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .select().single();
+    if (error) throw error;
+    res.json({ promo: data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/admin/promos/:id', auth, requireRole(['admin']), async (req, res) => {
+  try {
+    await supabase.from('promos').update({ is_active: false }).eq('id', req.params.id);
+    res.json({ message: 'Promo dinonaktifkan' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════
+// TRACKING RESI PENGIRIMAN
+// ════════════════════════════════════════════════════════════════
+
+// PATCH update tracking resi + courier (tanpa ganti status order)
+app.patch('/api/orders/:id/tracking', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { tracking_number, courier, courier_service, estimated_delivery } = req.body;
+    if (!tracking_number) return res.status(400).json({ error: 'tracking_number wajib diisi' });
+
+    const updates = { tracking_number };
+    if (courier) updates.courier = courier;
+    if (courier_service) updates.courier_service = courier_service;
+    if (estimated_delivery) updates.estimated_delivery = estimated_delivery;
+
+    const { data: order, error } = await supabase.from('orders')
+      .update(updates)
+      .eq('id', req.params.id)
+      .select('*, customer_stores(store_name, user_id, whatsapp, owner_name)')
+      .single();
+    if (error) throw error;
+
+    // Notif ke customer
+    if (order.customer_stores?.user_id) {
+      await createNotification(order.customer_stores.user_id, 'tracking_updated',
+        '📦 No. Resi Tersedia',
+        `Resi ${courier || ''} ${tracking_number} untuk order #${order.order_number}`,
+        { order_id: order.id, tracking_number });
+    }
+    if (order.customer_stores?.whatsapp) {
+      await sendWhatsApp(order.customer_stores.whatsapp,
+        `📦 *No. Resi Pengiriman*\n\nHalo ${order.customer_stores.owner_name}!\n\nPesanan *${order.order_number}* sudah dikirim.\n\nKurir: *${courier || order.courier || '-'}*\nNo. Resi: *${tracking_number}*\n\nLacak di website kurir ya!`,
+        order.store_id);
+    }
+    res.json({ order, message: 'Resi berhasil diperbarui' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════
+// STOK OPNAME GUDANG UTAMA
+// ════════════════════════════════════════════════════════════════
+
+app.post('/api/inventory/opname', auth, requireRole(['admin','staff']), async (req, res) => {
+  try {
+    const { items, notes } = req.body;
+    // items: [{product_id, actual_stock}]
+    if (!Array.isArray(items) || items.length === 0)
+      return res.status(400).json({ error: 'items wajib berupa array' });
+
+    const results = [];
+    for (const item of items) {
+      const { product_id, actual_stock } = item;
+      const { data: product } = await supabase.from('products')
+        .select('stock_karton, name').eq('id', product_id).single();
+      if (!product) continue;
+
+      const diff = actual_stock - product.stock_karton;
+      await supabase.from('products').update({ stock_karton: actual_stock }).eq('id', product_id);
+      await supabase.from('stock_movements').insert({
+        product_id,
+        type: diff >= 0 ? 'adjustment_in' : 'adjustment_out',
+        qty_karton: Math.abs(diff),
+        stock_before: product.stock_karton,
+        stock_after: actual_stock,
+        notes: notes || 'Stok opname gudang',
+        created_by: req.user.id,
+      });
+      results.push({ product_id, name: product.name, before: product.stock_karton, after: actual_stock, diff });
+    }
+
+    await supabase.from('activity_log').insert({
+      user_id: req.user.id, action: 'stock_opname',
+      entity_type: 'inventory', new_value: { items_count: results.length, notes },
+    });
+    res.json({ message: `Opname selesai: ${results.length} produk diperbarui`, results });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Global error handler — HARUS set CORS headers juga di sini
 // karena Vercel bisa capture error SEBELUM response headers dikirim
 app.use((err, req, res, next) => {
