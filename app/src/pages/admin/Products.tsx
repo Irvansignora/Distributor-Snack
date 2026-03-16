@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { NavLink } from 'react-router-dom';
 import { productService } from '@/services/products';
@@ -17,6 +17,14 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -32,18 +40,147 @@ import {
   AlertTriangle,
   Filter,
   Download,
+  Upload,
+  FileSpreadsheet,
+  CheckCircle2,
+  XCircle,
   Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Product } from '@/types';
 
+// ── Tipe untuk satu baris preview import ──────────────────────────────────────
+interface ImportRow {
+  row: number;
+  name: string;
+  sku: string;
+  description?: string;
+  category_name?: string;
+  pcs_per_pack: number;
+  pack_per_karton: number;
+  stock_karton: number;
+  reorder_level: number;
+  weight_gram?: number;
+  price_reseller: number;
+  price_agent: number;
+  image_url?: string;        // kolom L — URL Cloudinary/gambar
+  valid: boolean;
+  errors: string[];
+}
+
+// ── Parse CSV sederhana (handle quoted fields) ────────────────────────────────
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQuotes = !inQuotes; }
+    else if (c === ',' && !inQuotes) { result.push(current.trim()); current = ''; }
+    else current += c;
+  }
+  result.push(current.trim());
+  return result;
+}
+
+// ── Parse file Excel/CSV → array ImportRow ────────────────────────────────────
+async function parseImportFile(file: File): Promise<ImportRow[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Gagal membaca file'));
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        if (lines.length < 2) { resolve([]); return; }
+        // Skip header row
+        const rows: ImportRow[] = [];
+        for (let i = 1; i < lines.length; i++) {
+          const cols = parseCSVLine(lines[i]);
+          if (cols.length < 2 || !cols[0]) continue;
+          const errors: string[] = [];
+          const name          = cols[0] || '';
+          const sku           = cols[1] || '';
+          const description   = cols[2] || '';
+          const category_name = cols[3] || '';
+          const pcs_per_pack  = parseInt(cols[4]) || 0;
+          const pack_per_karton = parseInt(cols[5]) || 0;
+          const stock_karton  = parseInt(cols[6]) || 0;
+          const reorder_level = parseInt(cols[7]) || 0;
+          const weight_gram   = parseInt(cols[8]) || undefined;
+          const price_reseller = parseFloat(String(cols[9]).replace(/[^0-9.]/g, '')) || 0;
+          const price_agent    = parseFloat(String(cols[10]).replace(/[^0-9.]/g, '')) || 0;
+          // Kolom L (index 11) — URL foto Cloudinary, opsional
+          const raw_image_url  = (cols[11] || '').trim();
+          let image_url: string | undefined;
+          if (raw_image_url) {
+            try {
+              const u = new URL(raw_image_url);
+              if (u.protocol === 'https:' || u.protocol === 'http:') {
+                image_url = raw_image_url;
+              } else {
+                errors.push('URL foto tidak valid (harus https:// atau http://)');
+              }
+            } catch {
+              errors.push('URL foto tidak valid');
+            }
+          }
+          if (!name)    errors.push('Nama produk wajib diisi');
+          if (!sku)     errors.push('SKU wajib diisi');
+          if (!price_reseller) errors.push('Harga Reseller wajib diisi');
+          if (pack_per_karton <= 0) errors.push('Pack/karton harus > 0');
+          rows.push({ row: i + 1, name, sku, description, category_name, pcs_per_pack, pack_per_karton, stock_karton, reorder_level, weight_gram, price_reseller, price_agent, image_url, valid: errors.length === 0, errors });
+        }
+        resolve(rows);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+}
+
+// ── Download template CSV ─────────────────────────────────────────────────────
+function downloadTemplate() {
+  const headers = [
+    'Nama Produk*', 'SKU*', 'Deskripsi', 'Kategori',
+    'Pcs/Pack', 'Pack/Karton*', 'Stok Karton', 'Reorder Level',
+    'Berat (gram)', 'Harga Reseller*', 'Harga Agent', 'URL Foto (Cloudinary)',
+  ];
+  const examples = [
+    ['Chitato Sapi 80g', 'CHIT-SAPI-80', 'Keripik kentang rasa sapi', 'Snack',
+     '10', '12', '50', '10', '850', '85000', '78000',
+     'https://res.cloudinary.com/your-cloud/image/upload/v1/snackhub/products/chitato-sapi.jpg'],
+    ['Taro Net 140g', 'TARO-NET-140', 'Snack kentang rasa ayam panggang', 'Snack',
+     '10', '12', '30', '5', '1200', '95000', '87000', ''],
+  ];
+  const csvContent = [headers, ...examples]
+    .map(row => row.map(v => `"${v}"`).join(','))
+    .join('\n');
+  const BOM = '\uFEFF';
+  const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'template_import_produk.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function Products() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [showLowStock, setShowLowStock] = useState(false);
-  // BUG-03 FIX: state untuk AlertDialog konfirmasi hapus
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // ── Import state ─────────────────────────────────────────
+  const [importOpen, setImportOpen]       = useState(false);
+  const [importRows, setImportRows]       = useState<ImportRow[]>([]);
+  const [importParsing, setImportParsing] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult]   = useState<{ success: number; failed: number } | null>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   const queryClient = useQueryClient();
 
@@ -57,7 +194,6 @@ export default function Products() {
     }),
   });
 
-  // BUG-03 FIX: useMutation dengan loading state + toast + invalidateQueries
   const deleteMutation = useMutation({
     mutationFn: (id: string) => productService.deleteProduct(id),
     onSuccess: () => {
@@ -71,13 +207,57 @@ export default function Products() {
     },
   });
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(value);
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
+
+  // ── Handle file pilih → parse preview ───────────────────
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.endsWith('.csv')) {
+      toast.error('Hanya file .csv yang didukung. Gunakan template yang disediakan.');
+      return;
+    }
+    setImportParsing(true);
+    setImportResult(null);
+    try {
+      const rows = await parseImportFile(file);
+      setImportRows(rows);
+      if (rows.length === 0) toast.error('File kosong atau tidak ada data yang valid');
+    } catch {
+      toast.error('Gagal membaca file. Pastikan format CSV benar.');
+    } finally {
+      setImportParsing(false);
+      e.target.value = '';
+    }
   };
+
+  // ── Submit import: delegasi ke productService.importProducts ───────────────
+  const handleImportSubmit = async () => {
+    const validRows = importRows.filter(r => r.valid);
+    if (validRows.length === 0) { toast.error('Tidak ada baris yang valid untuk diimport'); return; }
+    setImportLoading(true);
+    try {
+      const result = await productService.importProducts(validRows);
+      setImportResult({ success: result.success, failed: result.failed });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      if (result.success > 0) toast.success(`${result.success} produk berhasil diimport`);
+      if (result.failed > 0)  toast.error(`${result.failed} produk gagal diimport`);
+    } catch {
+      toast.error('Import gagal. Coba lagi.');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleImportClose = () => {
+    setImportOpen(false);
+    setImportRows([]);
+    setImportResult(null);
+  };
+
+  const validCount   = importRows.filter(r => r.valid).length;
+  const invalidCount = importRows.filter(r => !r.valid).length;
 
   return (
     <div className="space-y-6">
@@ -89,12 +269,18 @@ export default function Products() {
             Kelola katalog produk dan inventori
           </p>
         </div>
-        <Button asChild>
-          <NavLink to="/admin/products/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Tambah Produk
-          </NavLink>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => { setImportRows([]); setImportResult(null); setImportOpen(true); }}>
+            <Upload className="mr-2 h-4 w-4" />
+            Import
+          </Button>
+          <Button asChild>
+            <NavLink to="/admin/products/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Tambah Produk
+            </NavLink>
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -199,7 +385,7 @@ export default function Products() {
         </>
       )}
 
-      {/* BUG-03 FIX: AlertDialog konfirmasi hapus - tidak pakai window.confirm() */}
+      {/* Delete confirm dialog */}
       <AlertDialog open={!!deleteId} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -222,6 +408,226 @@ export default function Products() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ════════════════════════════════════════════════════════
+          IMPORT DIALOG
+      ════════════════════════════════════════════════════════ */}
+      <Dialog open={importOpen} onOpenChange={(o) => { if (!o) handleImportClose(); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5 text-emerald-500" />
+              Import Produk dari CSV
+            </DialogTitle>
+            <DialogDescription>
+              Upload file CSV sesuai template. Produk akan ditambahkan ke katalog secara batch.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto space-y-4 py-2 pr-1">
+
+            {/* Step 1: Download template + upload */}
+            {!importResult && (
+              <div className="grid sm:grid-cols-2 gap-4">
+                {/* Download template */}
+                <div className="rounded-xl border-2 border-dashed border-muted p-5 flex flex-col items-center text-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+                    <Download className="h-6 w-6 text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">1. Download Template</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Gunakan template CSV ini untuk memastikan format data benar
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={downloadTemplate}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download template_import_produk.csv
+                  </Button>
+                </div>
+
+                {/* Upload file */}
+                <div
+                  className="rounded-xl border-2 border-dashed border-muted p-5 flex flex-col items-center text-center gap-3 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                  onClick={() => importFileRef.current?.click()}
+                >
+                  <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                    {importParsing
+                      ? <Loader2 className="h-6 w-6 text-emerald-500 animate-spin" />
+                      : <Upload className="h-6 w-6 text-emerald-500" />}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">2. Upload File CSV</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {importParsing ? 'Membaca file...' : 'Klik untuk pilih file .csv'}
+                    </p>
+                  </div>
+                  <input ref={importFileRef} type="file" accept=".csv" className="hidden" onChange={handleImportFile} />
+                  {importRows.length > 0 && (
+                    <div className="flex gap-2">
+                      {validCount > 0 && (
+                        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 border-0">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />{validCount} valid
+                        </Badge>
+                      )}
+                      {invalidCount > 0 && (
+                        <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400 border-0">
+                          <XCircle className="h-3 w-3 mr-1" />{invalidCount} error
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Format info */}
+            {importRows.length === 0 && !importResult && (
+              <div className="rounded-lg bg-muted/50 p-4 text-xs text-muted-foreground space-y-1.5">
+                <p className="font-semibold text-foreground text-sm">Format Kolom CSV (urutan wajib diikuti):</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                  {[
+                    ['A', 'Nama Produk', 'wajib'],
+                    ['B', 'SKU', 'wajib, unik'],
+                    ['C', 'Deskripsi', 'opsional'],
+                    ['D', 'Nama Kategori', 'opsional'],
+                    ['E', 'Pcs per Pack', 'angka'],
+                    ['F', 'Pack per Karton', 'wajib, angka'],
+                    ['G', 'Stok Karton', 'angka, default 0'],
+                    ['H', 'Reorder Level', 'angka, default 0'],
+                    ['I', 'Berat gram/pcs', 'opsional'],
+                    ['J', 'Harga Reseller/karton', 'wajib, angka'],
+                    ['K', 'Harga Agent/karton', 'opsional'],
+                    ['L', 'URL Foto (Cloudinary)', 'opsional, https://...'],
+                  ].map(([col, desc, note]) => (
+                    <div key={col} className="flex gap-1.5 items-baseline">
+                      <span className="font-mono font-bold text-primary w-4 shrink-0">{col}</span>
+                      <span>{desc}</span>
+                      <span className="text-muted-foreground/70 italic">— {note}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Preview table */}
+            {importRows.length > 0 && !importResult && (
+              <div className="rounded-lg border overflow-hidden">
+                <div className="bg-muted/50 px-4 py-2.5 flex items-center justify-between">
+                  <span className="text-sm font-medium">Preview Data ({importRows.length} baris)</span>
+                  <button
+                    className="text-xs text-muted-foreground hover:text-foreground underline"
+                    onClick={() => { setImportRows([]); if (importFileRef.current) importFileRef.current.value = ''; }}
+                  >
+                    Ganti file
+                  </button>
+                </div>
+                <div className="overflow-x-auto max-h-72">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-background border-b">
+                      <tr>
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground w-10">#</th>
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">Nama</th>
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">SKU</th>
+                        <th className="text-right py-2 px-3 font-medium text-muted-foreground">Stok</th>
+                        <th className="text-right py-2 px-3 font-medium text-muted-foreground">Harga Reseller</th>
+                        <th className="text-right py-2 px-3 font-medium text-muted-foreground">Harga Agent</th>
+                        <th className="text-center py-2 px-3 font-medium text-muted-foreground w-14">Foto</th>
+                        <th className="text-center py-2 px-3 font-medium text-muted-foreground w-16">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importRows.map((row) => (
+                        <tr key={row.row} className={cn(
+                          'border-b last:border-0',
+                          row.valid ? 'hover:bg-muted/30' : 'bg-red-50/50 dark:bg-red-950/20'
+                        )}>
+                          <td className="py-2 px-3 text-muted-foreground">{row.row}</td>
+                          <td className="py-2 px-3 font-medium max-w-[160px] truncate" title={row.name}>{row.name || '—'}</td>
+                          <td className="py-2 px-3 font-mono text-muted-foreground">{row.sku || '—'}</td>
+                          <td className="py-2 px-3 text-right">{row.stock_karton} karton</td>
+                          <td className="py-2 px-3 text-right font-medium">
+                            {row.price_reseller ? formatCurrency(row.price_reseller) : '—'}
+                          </td>
+                          <td className="py-2 px-3 text-right text-muted-foreground">
+                            {row.price_agent ? formatCurrency(row.price_agent) : '—'}
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            {row.image_url ? (
+                              <img
+                                src={row.image_url}
+                                alt={row.name}
+                                className="w-8 h-8 rounded object-cover mx-auto border"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            {row.valid ? (
+                              <CheckCircle2 className="h-4 w-4 text-emerald-500 mx-auto" />
+                            ) : (
+                              <div title={row.errors.join(', ')}>
+                                <XCircle className="h-4 w-4 text-red-500 mx-auto" />
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {invalidCount > 0 && (
+                  <div className="bg-red-50 dark:bg-red-950/20 px-4 py-2.5 border-t">
+                    <p className="text-xs text-red-700 dark:text-red-400">
+                      ⚠️ {invalidCount} baris memiliki error dan tidak akan diimport. Hover ikon ✗ untuk lihat detail error.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Result */}
+            {importResult && (
+              <div className="rounded-xl border p-6 text-center space-y-4">
+                <div className={cn(
+                  'w-16 h-16 rounded-full mx-auto flex items-center justify-center',
+                  importResult.failed === 0 ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-amber-100 dark:bg-amber-900/30'
+                )}>
+                  {importResult.failed === 0
+                    ? <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+                    : <AlertTriangle className="h-8 w-8 text-amber-500" />}
+                </div>
+                <div>
+                  <p className="text-lg font-bold">Import Selesai</p>
+                  <p className="text-muted-foreground text-sm mt-1">
+                    {importResult.success > 0 && <span className="text-emerald-600 font-medium">{importResult.success} produk berhasil ditambahkan</span>}
+                    {importResult.success > 0 && importResult.failed > 0 && ', '}
+                    {importResult.failed > 0 && <span className="text-red-600 font-medium">{importResult.failed} produk gagal</span>}
+                  </p>
+                </div>
+                <Button onClick={handleImportClose}>Tutup</Button>
+              </div>
+            )}
+          </div>
+
+          {/* Footer actions */}
+          {!importResult && (
+            <DialogFooter className="border-t pt-4 mt-2">
+              <Button variant="outline" onClick={handleImportClose}>Batal</Button>
+              <Button
+                onClick={handleImportSubmit}
+                disabled={validCount === 0 || importLoading}
+              >
+                {importLoading
+                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Mengimport {validCount} produk...</>
+                  : <><Upload className="mr-2 h-4 w-4" />Import {validCount} Produk Valid</>}
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -238,7 +644,6 @@ function ProductCard({
   const isLowStock = product.stock_quantity <= product.reorder_level;
   const isOutOfStock = product.stock_quantity === 0;
 
-  // Ambil harga: pakai price (legacy) kalau ada, fallback ke price_tiers reseller → agent
   const TIER_ORDER = ['reseller', 'agent'];
   const displayPrice = product.price || (() => {
     if (!product.price_tiers?.length) return 0;
