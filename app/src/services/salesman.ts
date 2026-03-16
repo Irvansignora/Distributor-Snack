@@ -70,6 +70,24 @@ export interface VehicleStock {
   products?: { id: string; name: string; sku: string; image_url?: string; unit_type?: string };
 }
 
+export interface AdminAttendanceRecord {
+  id: string;
+  salesman_id: string;
+  date: string;
+  clock_in?: string;
+  clock_out?: string;
+  clock_in_lat?: number;
+  clock_in_lng?: number;
+  clock_out_lat?: number;
+  clock_out_lng?: number;
+  clock_in_address?: string;
+  clock_out_address?: string;
+  clock_in_photo?: string;
+  clock_out_photo?: string;
+  status: 'hadir' | 'izin' | 'sakit' | 'alpha';
+  users?: { name: string; email: string };
+}
+
 export interface Performance {
   achievement: {
     salesman_id: string;
@@ -206,6 +224,11 @@ export const adminSalesmanService = {
   async deleteSalesman(id: string) {
     const { data } = await api.delete(`/admin/salesmen/${id}`);
     return data;
+  },
+
+  async getAdminAttendance(params?: { date?: string; salesman_id?: string }) {
+    const { data } = await api.get('/admin/attendance', { params });
+    return data as { attendance: AdminAttendanceRecord[] };
   },
 
   // ── Attendance ────────────────────────────────────────────
