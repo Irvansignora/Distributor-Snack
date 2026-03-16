@@ -13,7 +13,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Plus, Pencil, ToggleLeft, Ticket, Loader2, Percent, BadgeDollarSign, Truck } from 'lucide-react';
+import { Plus, Pencil, Ticket, Loader2, Percent, BadgeDollarSign, Truck } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
