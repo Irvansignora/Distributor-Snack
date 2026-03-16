@@ -1429,7 +1429,7 @@ app.patch('/api/orders/:id/status', auth, requireRole(['admin','staff']), async 
     if (status === 'cancelled')  { updates.cancelled_at = now; updates.cancelled_by = req.user.id; updates.cancel_reason = notes; }
 
     const { data: order, error } = await supabase.from('orders').update(updates).eq('id', req.params.id)
-      .select('*, customer_stores(store_name, owner_name, whatsapp, users!inner(id))')
+      .select('*, customer_stores(store_name, owner_name, whatsapp, user_id)')
       .single();
     if (error) throw error;
 
@@ -1444,8 +1444,12 @@ app.patch('/api/orders/:id/status', auth, requireRole(['admin','staff']), async 
 
     if (msgMap[status]) {
       const [type, title, msg] = msgMap[status];
-      await createNotification(order.customer_stores.users.id, type, title, msg, { order_id: order.id });
-      if (order.customer_stores.whatsapp) {
+      // BUG-3 FIX: ambil user_id dari customer_stores.user_id, bukan join users!inner
+      const storeUserId = order.customer_stores?.user_id;
+      if (storeUserId) {
+        await createNotification(storeUserId, type, title, msg, { order_id: order.id });
+      }
+      if (order.customer_stores?.whatsapp) {
         await sendWhatsApp(order.customer_stores.whatsapp,
           `${title}\n\nOrder *${order.order_number}*\n${msg}`, order.store_id);
       }
@@ -1544,7 +1548,7 @@ app.patch('/api/payments/:id/verify', auth, requireRole(['admin','staff']), asyn
     const { action, rejection_reason } = req.body;
 
     const { data: payment } = await supabase.from('payments')
-      .select('*, orders(id,total,total_paid,store_id,order_number,is_credit_order), customer_stores(owner_name,whatsapp,credit_used,users!inner(id))')
+      .select('*, orders(id,total,total_paid,store_id,order_number,is_credit_order), customer_stores(owner_name,whatsapp,credit_used,user_id)')
       .eq('id', req.params.id).single();
 
     if (action === 'verify') {
@@ -1564,10 +1568,14 @@ app.patch('/api/payments/:id/verify', auth, requireRole(['admin','staff']), asyn
         });
       }
 
-      await createNotification(payment.customer_stores.users.id, 'payment_verified',
-        '✅ Pembayaran Dikonfirmasi',
-        `Rp ${payment.amount.toLocaleString('id-ID')} untuk order ${payment.orders.order_number}`,
-        { order_id: payment.orders.id });
+      // BUG-3 FIX: pakai customer_stores.user_id, bukan users!inner(id)
+      const storeUserId = payment.customer_stores?.user_id;
+      if (storeUserId) {
+        await createNotification(storeUserId, 'payment_verified',
+          '✅ Pembayaran Dikonfirmasi',
+          `Rp ${payment.amount.toLocaleString('id-ID')} untuk order ${payment.orders.order_number}`,
+          { order_id: payment.orders.id });
+      }
 
       if (payment.customer_stores.whatsapp) {
         await sendWhatsApp(payment.customer_stores.whatsapp,
@@ -1577,8 +1585,12 @@ app.patch('/api/payments/:id/verify', auth, requireRole(['admin','staff']), asyn
       }
     } else {
       await supabase.from('payments').update({ status: 'rejected', rejection_reason }).eq('id', req.params.id);
-      await createNotification(payment.customer_stores.users.id, 'payment_rejected',
-        '❌ Bukti Bayar Ditolak', `Alasan: ${rejection_reason}`, { order_id: payment.orders.id });
+      // BUG-3 FIX: pakai customer_stores.user_id, bukan users!inner(id)
+      const storeUserId = payment.customer_stores?.user_id;
+      if (storeUserId) {
+        await createNotification(storeUserId, 'payment_rejected',
+          '❌ Bukti Bayar Ditolak', `Alasan: ${rejection_reason}`, { order_id: payment.orders.id });
+      }
     }
 
     res.json({ message: action === 'verify' ? 'Pembayaran dikonfirmasi' : 'Pembayaran ditolak' });
