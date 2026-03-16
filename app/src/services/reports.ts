@@ -20,6 +20,28 @@ interface InventoryReportResponse {
   };
 }
 
+interface ARReportResponse {
+  stores: any[];
+  summary: {
+    total_stores: number;
+    total_ar: number;
+    total_overdue: number;
+    overdue_stores: number;
+  };
+}
+
+interface CommissionReportResponse {
+  commissions: any[];
+  summary: {
+    total_salesman: number;
+    total_revenue: number;
+    total_commission: number;
+    avg_achievement: number;
+  };
+  month: number;
+  year: number;
+}
+
 export const reportService = {
   async getSalesReport(params?: {
     start_date?: string;
@@ -33,4 +55,15 @@ export const reportService = {
     const response = await api.get<InventoryReportResponse>('/reports/inventory');
     return response.data;
   },
+
+  async getARReport(params?: { overdue_only?: boolean; tier?: string }): Promise<ARReportResponse> {
+    const response = await api.get<ARReportResponse>('/reports/ar', { params });
+    return response.data;
+  },
+
+  async getCommissionReport(month: number, year: number): Promise<CommissionReportResponse> {
+    const response = await api.get<CommissionReportResponse>('/reports/salesman-commission', { params: { month, year } });
+    return response.data;
+  },
 };
+
