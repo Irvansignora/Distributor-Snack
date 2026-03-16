@@ -20,9 +20,9 @@ function downloadInvoice(order: Order, user: { name?: string; company_name?: str
   const itemRows = items.map(item => `
     <tr>
       <td style="padding:8px;border:1px solid #e5e7eb;">${item.product_name || item.product?.name || '-'}</td>
-      <td style="padding:8px;border:1px solid #e5e7eb;text-align:center;">${item.quantity}</td>
-      <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">${formatCurrency(item.unit_price)}</td>
-      <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">${formatCurrency(item.total_price)}</td>
+      <td style="padding:8px;border:1px solid #e5e7eb;text-align:center;">${item.qty_karton ?? item.quantity ?? 0} karton</td>
+      <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">${formatCurrency((item.price_per_karton ?? item.unit_price) || 0)}</td>
+      <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;">${formatCurrency((item.subtotal ?? item.total_price) || 0)}</td>
     </tr>
   `).join('');
 
