@@ -76,8 +76,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+  // BUG-4 FIX: gunakan item.product.price saja (sudah di-normalize ke tier price oleh Catalog)
+  // jangan fallback ke wholesale_price karena itu adalah harga agent, bukan harga customer tier
   const total = items.reduce(
-    (sum, item) => sum + item.quantity * (item.product.wholesale_price || item.product.price),
+    (sum, item) => sum + item.quantity * (item.product.price || 0),
     0
   );
 
