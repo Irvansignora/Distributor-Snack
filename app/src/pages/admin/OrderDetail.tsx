@@ -123,11 +123,11 @@ export default function OrderDetail() {
                       <div>
                         <p className="font-medium">{item.product_name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {item.quantity} x {formatCurrency(item.unit_price)}
+                          {(item.qty_karton ?? item.quantity ?? 0)} karton × {formatCurrency(item.price_per_karton ?? item.unit_price ?? 0)}
                         </p>
                       </div>
                     </div>
-                    <p className="font-bold">{formatCurrency(item.total_price)}</p>
+                    <p className="font-bold">{formatCurrency(item.subtotal ?? item.total_price ?? 0)}</p>
                   </div>
                 ))}
               </div>
