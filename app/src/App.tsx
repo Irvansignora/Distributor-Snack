@@ -23,6 +23,9 @@ import Reports from '@/pages/admin/Reports';
 import Settings from '@/pages/admin/Settings';
 import LandingSettings from '@/pages/admin/LandingSettings';
 import SupplierDetail from '@/pages/admin/SupplierDetail';
+import AdminReturns from '@/pages/admin/Returns';
+import SpecialPrices from '@/pages/admin/SpecialPrices';
+import AdminPromos from '@/pages/admin/Promos';
 
 import SupplierLayout from '@/layouts/SupplierLayout';
 import SupplierDashboard from '@/pages/supplier/Dashboard';
@@ -35,6 +38,7 @@ import MyOrders from '@/pages/supplier/MyOrders';
 import SupplierOrderDetail from '@/pages/supplier/OrderDetail';
 import Invoices from '@/pages/supplier/Invoices';
 import Profile from '@/pages/supplier/Profile';
+import SupplierReturns from '@/pages/supplier/Returns';
 import LandingPage from '@/pages/LandingPage';
 import SalesmanLayout from '@/layouts/SalesmanLayout';
 import SalesmanDashboard from '@/pages/salesman/Dashboard';
@@ -79,6 +83,9 @@ function App() {
                 <Route path="settings" element={<Settings />} />
                 <Route path="landing" element={<LandingSettings />} />
                 <Route path="salesmen" element={<AdminSalesmen />} />
+                <Route path="returns" element={<AdminReturns />} />
+                <Route path="special-prices" element={<SpecialPrices />} />
+                <Route path="promos" element={<AdminPromos />} />
                 {/* BUG FIX: /suppliers redirect ke StoreManagement agar link lama tidak 404 */}
                 <Route path="suppliers" element={<StoreManagement />} />
                 <Route path="suppliers/:id" element={<SupplierDetail />} />
@@ -97,6 +104,7 @@ function App() {
                 <Route path="orders/:id" element={<SupplierOrderDetail />} />
                 <Route path="invoices" element={<Invoices />} />
                 <Route path="profile" element={<Profile />} />
+                <Route path="returns" element={<SupplierReturns />} />
               </Route>
 
               {/* Salesman */}
