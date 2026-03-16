@@ -86,9 +86,15 @@ export interface OrderItem {
   order_id: string;
   product_id: string;
   product_name: string;
-  quantity: number;
-  unit_price: number;
-  total_price: number;
+  // B2B fields (dari API backend)
+  qty_karton?: number;
+  price_per_karton?: number;
+  subtotal?: number;
+  tier_applied?: string;
+  // Legacy fields (fallback kompatibilitas)
+  quantity?: number;
+  unit_price?: number;
+  total_price?: number;
   unit?: string;
   product?: Product;
 }
