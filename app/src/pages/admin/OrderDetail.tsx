@@ -293,28 +293,3 @@ export default function OrderDetail() {
     </div>
   );
 }
-
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-// Badge component not used in this file
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { ArrowLeft, Package, Truck, CheckCircle, XCircle, Clock } from 'lucide-react';
-import { format } from 'date-fns';
-import { toast } from 'sonner';
-import type { OrderStatus } from '@/types';
-
-const statusOptions: { value: OrderStatus; label: string; icon: React.ElementType }[] = [
-  { value: 'pending', label: 'Pending', icon: Clock },
-  { value: 'confirmed', label: 'Confirmed', icon: CheckCircle },
-  { value: 'packing', label: 'Packing', icon: Package },
-  { value: 'shipped', label: 'Shipped', icon: Truck },
-  { value: 'delivered', label: 'Delivered', icon: Package },
-  { value: 'completed', label: 'Completed', icon: CheckCircle },
-  { value: 'cancelled', label: 'Cancelled', icon: XCircle },
-];
