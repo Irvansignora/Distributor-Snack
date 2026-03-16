@@ -35,7 +35,8 @@ export function SupplierNavbar() {
   const navLinks = [
     { to: '/supplier/dashboard', label: 'Beranda' },
     { to: '/supplier/catalog', label: 'Katalog Produk' },
-    { to: '/supplier/orders', label: 'Pesanan Saya' },
+    { to: '/supplier/orders',  label: 'Pesanan Saya' },
+    { to: '/supplier/returns', label: 'Retur & Klaim' },
   ];
 
   return (
