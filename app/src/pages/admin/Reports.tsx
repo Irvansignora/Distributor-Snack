@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import {
   Download, FileText, Package, TrendingUp, CreditCard, Users,
-  Loader2, AlertTriangle, Bell, ClipboardList, RotateCcw,
+  Loader2, AlertTriangle, Bell,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -536,16 +536,3 @@ export default function Reports() {
     </div>
   );
 }
-
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-// BUG-06 FIX: un-comment recharts imports
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Download, FileText, Package, TrendingUp } from 'lucide-react';
-import { format } from 'date-fns';
-import { Input } from '@/components/ui/input';
-import { toast } from 'sonner';
-import type { Order, Product } from '@/types';
-
-// BUG-06 FIX: hapus _COLORS yang tidak dipakai, gunakan langsung
